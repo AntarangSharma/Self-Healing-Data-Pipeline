@@ -303,16 +303,14 @@ def run_agent(
 
     try:
         _triage(incident, llm, meter)
-        # always run diagnose for v0 (mock is free); real providers can short-circuit
-        # if predicted_class_confidence >= 0.95
-        if (
-            llm.name == "mock"
-            or incident.predicted_class == "unknown"
-            or incident.predicted_class_confidence < 0.95
-        ):
-            diagnosis = _diagnose(incident, llm, meter, registry)
+        # Diagnose is required to produce structured patches. The only class where
+        # we can short-circuit to retry without a diagnose call is upstream_5xx
+        # (which has no patches anyway). Everything else — even high-confidence
+        # triage — needs diagnose because that's where the patch list is produced.
+        if incident.predicted_class == "upstream_5xx":
+            diagnosis = {"fix_kind": "retry", "root_cause": "transient upstream 5xx"}
         else:
-            diagnosis = {"fix_kind": "retry", "root_cause": "triage confident"}
+            diagnosis = _diagnose(incident, llm, meter, registry)
 
         incident.proposed_fix_kind = diagnosis.get("fix_kind", "noop")
         files, diff_text = _plan_files(incident, diagnosis)

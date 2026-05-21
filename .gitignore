@@ -22,3 +22,4 @@ node_modules/
 fixtures/
 fixtures_adversarial/
 .claude/
+results_real_*.jsonl

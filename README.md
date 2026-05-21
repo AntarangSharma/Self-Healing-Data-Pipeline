@@ -8,9 +8,17 @@
 
 ---
 
+## 60-second demo
+
+![demo](docs/demo/demo.svg)
+
+(Want to drive it yourself? `make quickstart`.)
+
 ## TL;DR — Headline Numbers
 
 Reproducible on any laptop in **~90 seconds**, no API keys required (uses a deterministic mock LLM provider).
+
+### Mock provider (n=50 fixtures, CI-friendly, $0 cost)
 
 | Policy | Resolved | Class Acc. | Hallucination | MTTR | $ / incident |
 |---|---|---|---|---|---|
@@ -19,7 +27,18 @@ Reproducible on any laptop in **~90 seconds**, no API keys required (uses a dete
 | **B2** – single-shot LLM (no tools) | 0 % | 100 % | 0 % | 0 ms | $0.00 |
 | **Ours** – agent + tools + guardrails | **100 %** | **100 %** | **0 %** | 81 ms | $0.00 |
 
-> n = 50 deterministic chaos fixtures (5 per failure class × 10 classes). The “mock” LLM is a regex-driven stand-in tuned to read structured logs; real-LLM numbers are expected to be **lower** and are part of the next milestone. The point is the *harness*, not the mock score.
+### Real LLM — Claude Sonnet 4 (`claude-sonnet-4-20250514`, prompts v2)
+
+| Metric | Value |
+|---|---|
+| **Resolved** | **35 / 50 = 70 %** |
+| **Class accuracy** (triage) | **50 / 50 = 100 %** |
+| **Hallucination rate** | **0 / 50 = 0 %** |
+| **MTTR** | 5.95 s |
+| **$ / incident** | $0.0095 |
+| **Total run cost** | $0.48 |
+
+Full per-class breakdown: [`docs/results/anthropic_claude_sonnet_4.md`](docs/results/anthropic_claude_sonnet_4.md). The mock's 100 % is a regex tuned to the fixtures — **the real number to weigh is 70 % resolved with 0 % hallucination**.
 
 **Adversarial guardrail suite:** **4 / 4 attacks blocked** (`DROP TABLE` injection, forbidden-path edit, blast-radius explosion, prompt injection in log line).
 
@@ -155,7 +174,7 @@ Everything is in [`docs/01_revised_plan.md`](docs/01_revised_plan.md), but the s
 
 I am not selling you snake oil. Read this section.
 
-1. **Mock LLM = upper bound, not a real result.** The 100 % “Ours” score uses a regex-driven mock. Real OpenAI / Anthropic numbers will be lower (target: ≥ 70 % resolution, ≤ 5 % hallucination on the same fixture set). The framework is built so you can run it tomorrow with `OPENAI_API_KEY=…`.
+1. **Mock LLM = upper bound, not a real result.** The 100 % “Ours” score uses a regex-driven mock. The real Claude Sonnet 4 number on the same harness is 70 % resolved with 0 % hallucination (see [results doc](docs/results/anthropic_claude_sonnet_4.md)). The 30-point gap is concentrated in two classes (`idempotency`, `null_spike`) where the model produces a semantically correct fix that doesn't match the exact `must_include_strings` shape; a prompt v3 iteration is the obvious next move.
 2. **Fixtures are synthetic.** TPC-H-style schema, small repos. A real prod Airflow DAG with 200 tasks and a 4-deep XCom chain will surface bugs this harness doesn’t see.
 3. **No live Airflow yet.** Week-2 work; `docker-compose.yml` with a small Airflow + Postgres stack is the next milestone.
 4. **The PR tool prefers `gh` CLI.** Without `gh`, it falls back to a local bare-repo branch + unified diff so eval still works in CI.
@@ -165,7 +184,9 @@ I am not selling you snake oil. Read this section.
 
 ## Roadmap
 
-- [ ] Real-LLM eval matrix (openai-mini, claude-haiku, llama3-8b) committed to `results/`.
+- [x] Real-LLM eval committed: Claude Sonnet 4 → 70 % resolved, 0 % hallucination. [Results doc](docs/results/anthropic_claude_sonnet_4.md).
+- [ ] Extend the real-LLM matrix to `gpt-4o-mini`, `claude-3-5-haiku`, `llama3-8b` for a price/quality grid.
+- [ ] Prompt v3 to lift `idempotency` and `null_spike` from 0 → ≥ 80 %.
 - [ ] `docker-compose.yml` with Airflow 2.x + Postgres + the agent as a sidecar.
 - [ ] Postgres schema-sandbox tool (apply patch → run dbt → diff before/after).
 - [ ] Held-out “wild” fixture set sourced from public Airflow issues.
