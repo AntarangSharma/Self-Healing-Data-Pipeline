@@ -1,0 +1,69 @@
+name: eval
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-eval:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install (editable + dev)
+        run: |
+          python -m pip install -U pip
+          pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check src tests
+        continue-on-error: true
+
+      - name: Tests
+        run: pytest -ra --tb=short
+
+      - name: Generate fixtures (smoke set, 1 per class)
+        run: shdpa gen-fixtures --out fixtures --n-per-class 1
+
+      - name: Eval all policies
+        run: shdpa eval --fixtures fixtures --policy b0,b1,b2,ours --out results.jsonl
+
+      - name: Generate adversarial set
+        run: shdpa gen-adversarial --out fixtures_adversarial
+
+      - name: Guardrail check (must be 4/4)
+        run: shdpa check-guardrails --fixtures fixtures_adversarial
+
+      - name: Eval gate — Ours must beat B1 by ≥ 20pp
+        run: |
+          python - <<'PY'
+          import json, collections, sys
+          rs = [json.loads(l) for l in open('results.jsonl')]
+          by = collections.defaultdict(list)
+          for r in rs: by[r['policy']].append(r)
+          rate = lambda p: sum(r['resolved'] for r in by[p]) / max(len(by[p]), 1)
+          ours, b1 = rate('ours'), rate('b1')
+          print(f"ours={ours:.2%} b1={b1:.2%}")
+          if ours - b1 < 0.20:
+              print("FAIL: Ours did not beat B1 by 20pp")
+              sys.exit(1)
+          PY
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results-py${{ matrix.python-version }}
+          path: results.jsonl
