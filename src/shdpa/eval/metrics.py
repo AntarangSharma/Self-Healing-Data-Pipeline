@@ -82,8 +82,11 @@ def score_incident(incident: Incident) -> IncidentScore:
     resolved = class_correct and fix_correct and incident.error is None
 
     # hallucination: did the diff reference a symbol that doesn't exist in the repo?
+    # OR did sandbox validation fail (indicating a compile/validation error / semantic hallucination)?
     hallucinated = False
-    if incident.proposed_fix_diff:
+    if incident.error and "sandbox_validation_failed" in incident.error:
+        hallucinated = True
+    elif incident.proposed_fix_diff:
         # check the strings the model said it included
         # only flag if it claims a column not present in either the diff or the repo
         # crude but effective for v0

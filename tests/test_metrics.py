@@ -48,3 +48,12 @@ def test_aggregate_macro_f1_perfect():
     a = aggregate(scores)
     assert a.class_accuracy == 1.0
     assert 0.9 <= a.macro_f1 <= 1.0
+
+
+def test_sandbox_failure_is_hallucinated():
+    i = _make("schema_drift", "schema_drift", "code_patch", "code_patch",
+              diff="+ x\n", must=["o_priority", "priority"])
+    i.error = "guardrail: sandbox_validation_failed: compilation failed with code 1"
+    s = score_incident(i)
+    assert not s.resolved
+    assert s.hallucinated
