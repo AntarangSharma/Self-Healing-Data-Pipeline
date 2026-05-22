@@ -25,9 +25,9 @@ type: $(VENV)
 test: $(VENV)
 	$(VENV)/bin/pytest -ra
 
-fixtures: $(VENV) ## generate 20 fixtures (2 per class × 10 classes)
+fixtures: $(VENV) ## generate 100 fixtures (10 per class × 10 classes)
 	rm -rf fixtures
-	$(SHDPA) gen-fixtures --out fixtures --n-per-class 2
+	$(SHDPA) gen-fixtures --out fixtures --n-per-class 10
 
 eval: $(VENV) ## run B0,B1,B2,ours on the fixture set
 	$(SHDPA) eval --fixtures fixtures --policy b0,b1,b2,ours --out results.jsonl

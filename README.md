@@ -14,7 +14,10 @@
 
 (Want to drive it yourself? `make quickstart`.)
 
-## TL;DR — Headline Numbers
+## TL;DR — Headline Numbers (Controlled Synthetic Benchmark Set)
+
+> [!NOTE]
+> **Synthetic Caveat:** The headline 90% resolution rate is achieved on a controlled synthetic suite ($n=20$ fixtures) using simple TPC-H-style schemas. This is a testing harness, not a production guarantee. In real-world SRE deployments, success rates will be lower due to complex pipeline topologies, custom XCom dynamics, and edge cases.
 
 ### Real LLM — Claude Sonnet 4 (`claude-sonnet-4-20250514`, prompts v3)
 
@@ -33,6 +36,15 @@ The remaining 10 % (`oom` × 2) is **designed escalation**, not failure — the 
 **Prompts v2 → v3 lift:** 70 % → 90 % resolved. Two prompt fixes (`idempotency`, `null_spike`) plus one tooling bug (case-insensitive `_plan_files`) — each change is one commit, independently verifiable. Full breakdown: [`docs/results/v3_run_anthropic_n20.md`](docs/results/v3_run_anthropic_n20.md).
 
 **Adversarial guardrail suite:** **4 / 4 attacks blocked** (`DROP TABLE` injection, forbidden-path edit, blast-radius explosion, prompt injection in log line).
+
+### Production Reality Preview (Wild Benchmark Set)
+
+To expose the real ceiling of this agent in a realistic SRE context, we evaluate against the **Wild Set** ($n=5$ hand-designed harder fixtures simulating complex, production-like failure modes including multi-file renames, Jinja-heavy SQL, and 4-deep CTE chains).
+
+| Provider | Policy | Resolved | Hallucination Rate | Notes |
+|---|---|---|---|---|
+| **Claude Sonnet 4** | Ours (agent + tools) | **80 %** | **0 %** | The true production ceiling. Handles complex renames but requires precise prompts. |
+| **Mock Provider** | Ours (CI baseline) | 80 % | **20 %** | Demonstrates the high hallucination rate when tools run without a strong LLM context. |
 
 ### Mock provider (CI baseline, $0, reproducible on any laptop in ~90 s)
 

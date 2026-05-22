@@ -60,11 +60,19 @@ def _open_pr(
     except subprocess.CalledProcessError as e:
         return ToolResult(ok=False, summary=f"git failed: {e.output[:300]!r}", error="git_error")
 
+    strict_pr = os.getenv("SHDPA_STRICT_PR", "0").lower() in ("1", "true", "yes")
+
     pr_url: str | None = None
     from shdpa.middleware.secrets import get_secret
     gh_token = get_secret("GH_TOKEN")
     if gh_token:
         os.environ["GH_TOKEN"] = gh_token
+
+    if strict_pr:
+        if not gh_token:
+            return ToolResult(ok=False, summary="Missing GH_TOKEN in strict PR mode", error="missing_gh_token")
+        if not shutil.which("gh"):
+            return ToolResult(ok=False, summary="Missing gh CLI in strict PR mode", error="missing_gh_cli")
 
     if shutil.which("gh") and gh_token:
         try:
@@ -77,9 +85,13 @@ def _open_pr(
             ).decode(errors="replace").strip()
             pr_url = out.splitlines()[-1] if out else None
         except Exception as e:  # noqa: BLE001
+            if strict_pr:
+                return ToolResult(ok=False, summary=f"GitHub PR failed: {e}", error="gh_pr_failed")
             pr_url = f"(gh pr failed: {e}; commit {sha[:8]})"
 
     if not pr_url:
+        if strict_pr:
+            return ToolResult(ok=False, summary="PR URL was not generated in strict PR mode", error="no_pr_url")
         pr_url = f"local://{repo_path}#branch={branch}&sha={sha[:8]}"
 
     return ToolResult(

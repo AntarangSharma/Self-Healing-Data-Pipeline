@@ -34,12 +34,14 @@ log = structlog.get_logger()
 
 
 def _build_registry() -> ToolRegistry:
-    from shdpa.tools import git_diff, logs, pr, schema_diff
+    from shdpa.tools import git_diff, logs, pr, schema_diff, airflow_api
     reg = ToolRegistry()
     reg.register(logs.TOOL)
     reg.register(schema_diff.TOOL)
     reg.register(git_diff.TOOL)
     reg.register(pr.TOOL)
+    reg.register(airflow_api.CLEAR_TASK_TOOL)
+    reg.register(airflow_api.GET_TASK_STATUS_TOOL)
     return reg
 
 
@@ -439,11 +441,65 @@ def run_agent(
 
         incident.actions.append(action)
         incident.resolved = action.kind == "pr"
+
+        # Closed-loop live Airflow verification
+        live_verify = os.getenv("SHDPA_LIVE_AIRFLOW_VERIFY", "0").lower() in ("1", "true", "yes")
+        if live_verify and incident.resolved and incident.dag_id and incident.task_id and incident.run_id:
+            log.info("airflow_verify.start", dag_id=incident.dag_id, task_id=incident.task_id, run_id=incident.run_id)
+            # Clear task to trigger retry
+            clear_res = registry.call(
+                "clear_airflow_task",
+                incident,
+                dag_id=incident.dag_id,
+                task_id=incident.task_id,
+                run_id=incident.run_id,
+            )
+            if not clear_res.ok:
+                log.warning("airflow_verify.clear_failed", error=clear_res.summary)
+                incident.resolved = False
+                incident.error = f"live_verify_failed: clear task failed: {clear_res.summary}"
+            else:
+                # Poll status
+                poll_success = False
+                max_polls = 24  # 2 minutes total
+                poll_interval = 5
+                for poll_idx in range(max_polls):
+                    time.sleep(poll_interval)
+                    status_res = registry.call(
+                        "get_airflow_task_status",
+                        incident,
+                        dag_id=incident.dag_id,
+                        task_id=incident.task_id,
+                        run_id=incident.run_id,
+                    )
+                    if status_res.ok and status_res.data:
+                        state = status_res.data.get("state")
+                        log.info("airflow_verify.poll", attempt=poll_idx+1, state=state)
+                        if state == "success":
+                            poll_success = True
+                            break
+                        elif state in ("failed", "upstream_failed"):
+                            break
+                if not poll_success:
+                    log.warning("airflow_verify.validation_failed")
+                    incident.resolved = False
+                    incident.error = "live_verify_failed: task did not succeed after patch"
+                    # Rollback git branch in the repository if verification failed
+                    if incident.repo_path and Path(incident.repo_path).exists():
+                        import subprocess
+                        try:
+                            subprocess.run(["git", "-C", incident.repo_path, "checkout", "main"], check=False)
+                            branch_name = action.payload.get("branch")
+                            if branch_name:
+                                subprocess.run(["git", "-C", incident.repo_path, "branch", "-D", branch_name], check=False)
+                        except Exception:  # noqa: BLE001
+                            pass
+
         incident.resolution_kind = (
-            "auto" if (action.kind == "pr"
+            "auto" if (incident.resolved
                        and incident.predicted_class in AUTO_FIX_WHITELIST
                        and incident.predicted_class_confidence >= 0.85)
-            else "pr" if action.kind == "pr"
+            else "pr" if incident.resolved
             else "unresolved"
         )
     except CostBudgetExceeded as e:
