@@ -1,0 +1,88 @@
+# docker-compose.yml — minimal stack for running shdpa end-to-end locally.
+#
+# Three services:
+#   1. postgres     — Airflow metastore + agent's incident DB
+#   2. airflow      — single-container LocalExecutor (good enough for demos)
+#   3. shdpa        — the agent, exposes /healthz, /metrics, POST /incidents
+#
+# Quickstart:
+#   cp .env.example .env  # fill ANTHROPIC_API_KEY (or leave SHDPA_LLM_PROVIDER=mock)
+#   docker compose up --build
+#   curl http://localhost:8080/healthz
+#   curl http://localhost:8080/metrics
+#
+# This is intentionally NOT production-grade — see docs/04_runbook.md for the
+# hardened deploy (TLS, secrets manager, RBAC, etc.).
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  airflow:
+    image: apache/airflow:2.9.3-python3.11
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__WEBSERVER__SECRET_KEY: "shdpa-dev-only-change-me"
+      AIRFLOW__CORE__FERNET_KEY: ""  # dev only
+      # Point Airflow at the shdpa callback once you wire it up (week-2 work).
+      SHDPA_CALLBACK_URL: "http://shdpa:8080/incidents"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+    ports:
+      - "8081:8080"  # 8080 reserved for shdpa
+    command: >
+      bash -c "airflow db migrate &&
+               airflow users create --username admin --password admin --firstname A --lastname B --role Admin --email a@b.c || true &&
+               airflow standalone"
+
+  shdpa:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SHDPA_LLM_PROVIDER: ${SHDPA_LLM_PROVIDER:-mock}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      SHDPA_ANTHROPIC_MODEL: ${SHDPA_ANTHROPIC_MODEL:-claude-3-5-sonnet-latest}
+      SHDPA_PROMPT_VERSION: v3
+      SHDPA_STORAGE_PATH: /data/shdpa.db
+      SHDPA_DRY_RUN: "true"
+      SHDPA_ESCALATION_DRYRUN: ${SHDPA_ESCALATION_DRYRUN:-1}
+      SHDPA_SLACK_WEBHOOK_URL: ${SHDPA_SLACK_WEBHOOK_URL:-}
+      SHDPA_PAGERDUTY_ROUTING_KEY: ${SHDPA_PAGERDUTY_ROUTING_KEY:-}
+    volumes:
+      - shdpa_data:/data
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/healthz').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: ["shdpa", "serve", "--host", "0.0.0.0", "--port", "8080"]
+
+volumes:
+  pgdata:
+  airflow_logs:
+  shdpa_data:

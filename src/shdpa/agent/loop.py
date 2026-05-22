@@ -9,7 +9,7 @@ We deliberately avoid LangGraph for v0. Migration trigger:
 """
 from __future__ import annotations
 
-import json
+import contextlib
 import re
 import time
 from pathlib import Path
@@ -24,7 +24,10 @@ from shdpa.agent.guardrails import (
 from shdpa.agent.prompts import load_prompt
 from shdpa.llm.provider import LLMProvider, get_provider
 from shdpa.middleware.cost_meter import CostBudgetExceeded, CostMeter
+from shdpa.middleware.escalate import escalate
+from shdpa.middleware.redact import redact_incident_in_place
 from shdpa.models import Action, Incident, LLMCall
+from shdpa.storage import get_default_store
 from shdpa.tools.registry import ToolRegistry
 
 log = structlog.get_logger()
@@ -126,7 +129,7 @@ def _diagnose(
         f"exception_type: {incident.exception_type or ''}",
         f"exception_message: {incident.exception_message or ''}",
         f"repo_files: {repo_files}",
-        f"log (tail 60):\n" + "\n".join(incident.log_text.splitlines()[-60:]),
+        "log (tail 60):\n" + "\n".join(incident.log_text.splitlines()[-60:]),
         f"schema_diff_summary: {schema_summary}{rename_hint}",
         f"git_diff (truncated):\n{diff_summary}" if diff_summary else "",
         hint_block,
@@ -143,12 +146,10 @@ def _diagnose(
     ))
     # update confidence if diagnose returned one
     if "confidence" in data:
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             incident.predicted_class_confidence = max(
                 incident.predicted_class_confidence, float(data["confidence"])
             )
-        except (TypeError, ValueError):
-            pass
     incident.root_cause_summary = (data.get("root_cause") or "")[:280]
     return data
 
@@ -333,7 +334,22 @@ def run_agent(
     guardrails = guardrails or Guardrails()
     registry = _build_registry()
 
+    # --- Pre-flight: redact PII/secrets from the log before ANY LLM call ---
+    # See src/shdpa/middleware/redact.py for the patterns. The original log
+    # is overwritten in-place; downstream code never sees the raw bytes.
+    if incident.log_text:
+        clean, counts = redact_incident_in_place(incident.log_text)
+        if counts:
+            log.info(
+                "redaction.applied",
+                incident_id=str(incident.id),
+                counts=counts,
+            )
+        incident.log_text = clean
+
     try:
+        # --- Per-repo allow-list (env-gated, default permissive) ---
+        guardrails.check_repo_allowed(incident)
         _triage(incident, llm, meter)
         # Diagnose is required to produce structured patches. Special cases:
         #   - upstream_5xx: short-circuit to retry (no patches needed).
@@ -418,6 +434,17 @@ def run_agent(
         incident.error = f"cost_budget: {e}"
         incident.resolved = False
         incident.resolution_kind = "unresolved"
+    except GuardrailViolation as gv:
+        # repo-not-allowed (or any guardrail raised before action dispatch)
+        incident.error = f"guardrail: {gv}"
+        incident.resolved = False
+        incident.resolution_kind = "unresolved"
+        incident.actions.append(Action(
+            kind="noop",
+            payload={"reason": str(gv), "rule": gv.rule},
+            blocked_by_guardrail=gv.rule,
+            dry_run=True,
+        ))
     except Exception as e:  # noqa: BLE001
         incident.error = f"agent_error: {e!r}"
         incident.resolved = False
@@ -425,4 +452,33 @@ def run_agent(
 
     incident.total_cost_usd = sum(c.cost_usd for c in incident.llm_calls)
     incident.total_latency_s = time.time() - t0
+
+    # --- Post-flight: persistence + escalation ---
+    # Persist if SHDPA_STORAGE_PATH is set (silently no-op otherwise — the
+    # eval harness doesn't want disk I/O for 50 fixtures × 4 policies).
+    store = get_default_store()
+    if store is not None:
+        try:
+            store.save_incident(incident)
+        except Exception as e:  # noqa: BLE001
+            log.warning("storage.save_failed", error=repr(e))
+
+    # Escalate if the agent did NOT produce a successful PR. This covers:
+    #   - non-whitelisted classes (oom, auth_expiry, unknown)
+    #   - guardrail blocks
+    #   - cost-budget kills
+    #   - low-confidence triage
+    # Escalation is a no-op unless a channel env var is set (Slack/PD), so
+    # local dev + CI keep working. See middleware/escalate.py.
+    if not incident.resolved:
+        reason = incident.error or (
+            f"agent did not auto-resolve "
+            f"(class={incident.predicted_class}, "
+            f"conf={incident.predicted_class_confidence:.2f})"
+        )
+        try:
+            escalate(incident, reason=reason)
+        except Exception as e:  # noqa: BLE001
+            log.warning("escalation.failed", error=repr(e))
+
     return incident

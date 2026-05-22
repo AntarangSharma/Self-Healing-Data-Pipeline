@@ -182,5 +182,39 @@ def check_guardrails(fixtures: Path) -> None:
         click.echo(f"  [{mark}] {fid}  (expected rule: {rule})")
 
 
+@main.command()
+@click.option("--host", default="0.0.0.0", help="bind address")
+@click.option("--port", default=8080, type=int, help="bind port")
+def serve(host: str, port: int) -> None:
+    """Run the FastAPI HTTP surface (POST /incidents, GET /metrics, /healthz).
+
+    Requires the [serve] extra: `pip install -e '.[serve]'`.
+    """
+    from shdpa.serve import serve as _serve
+    _serve(host=host, port=port)
+
+
+@main.command(name="verify-audit")
+def verify_audit() -> None:
+    """Re-hash every persisted incident and report tampering.
+
+    Reads SHDPA_STORAGE_PATH (the SQLite file the agent writes to). Exits
+    non-zero if any row's recomputed SHA256 doesn't match the audit_log.
+    """
+    from shdpa.storage import get_default_store
+    store = get_default_store()
+    if store is None:
+        click.echo("SHDPA_STORAGE_PATH not set; nothing to verify.", err=True)
+        sys.exit(2)
+    bad = store.verify_audit()
+    if not bad:
+        click.echo("audit OK: all incidents hash-match.")
+        sys.exit(0)
+    click.echo(f"AUDIT TAMPERING DETECTED on {len(bad)} rows:", err=True)
+    for row in bad[:20]:
+        click.echo(f"  incident_id={row['incident_id']} expected={row['expected_sha']} actual={row['actual_sha']}", err=True)
+    sys.exit(1)
+
+
 if __name__ == "__main__":
     main()

@@ -9,8 +9,9 @@ from __future__ import annotations
 import fnmatch
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 
-from shdpa.models import Action, FailureClass
+from shdpa.models import Action, FailureClass, Incident
 
 # Classes that may be auto-executed without a human-approved PR.
 AUTO_FIX_WHITELIST: set[FailureClass] = {
@@ -44,6 +45,36 @@ class Guardrails:
     require_dry_run: bool = field(
         default_factory=lambda: os.getenv("SHDPA_DRY_RUN", "true").lower() == "true"
     )
+
+    def check_repo_allowed(self, incident: Incident) -> None:
+        """Reject incidents whose `repo_path` isn't in the allow-list.
+
+        Controlled by env var `SHDPA_ALLOWED_REPOS` — a colon-separated list
+        of glob patterns matched against the incident's `repo_path`.
+
+        Default (env unset) is permissive so the existing 27 unit tests and
+        the eval harness keep running unchanged. Set the env var in
+        production to lock the agent to a known set of repos and prevent
+        a poisoned `incident.json` from making the agent touch `/etc/`
+        or a sibling repo it has no business in.
+        """
+        raw = os.getenv("SHDPA_ALLOWED_REPOS", "").strip()
+        if not raw:
+            return
+        if not incident.repo_path:
+            raise GuardrailViolation(
+                "repo_not_allowed",
+                "incident has no repo_path but SHDPA_ALLOWED_REPOS is set",
+            )
+        resolved = str(Path(incident.repo_path).resolve())
+        patterns = [p.strip() for p in raw.split(":") if p.strip()]
+        for pat in patterns:
+            if fnmatch.fnmatch(resolved, pat) or fnmatch.fnmatch(incident.repo_path, pat):
+                return
+        raise GuardrailViolation(
+            "repo_not_allowed",
+            f"{incident.repo_path!r} not in SHDPA_ALLOWED_REPOS={patterns}",
+        )
 
     def check_action(
         self,

@@ -214,6 +214,23 @@ I am not selling you snake oil. Read this section.
 
 ---
 
+## Production hardening (shipped)
+
+Beyond the eval numbers, the agent now has the pieces an SRE needs to actually run it:
+
+| Piece | Module | What it does |
+|---|---|---|
+| **PII / secret redaction** | `middleware/redact.py` | 13 regex patterns (AWS / OpenAI / Anthropic / GitHub keys, JWTs, SSH keys, DB URLs with passwords, emails, IPs, credit cards) applied to every log line **before** the LLM sees it. Disable with `SHDPA_DISABLE_REDACTION=1`. |
+| **Per-repo allow-list** | `agent/guardrails.py` | `SHDPA_ALLOWED_REPOS=/srv/airflow/*:/srv/dbt/*` — incidents pointing at any other repo short-circuit to `noop` with rule `repo_not_allowed`. |
+| **SQLite persistence + audit log** | `storage/sqlite_store.py` | Every incident persisted with a SHA256 hash. `shdpa verify-audit` re-hashes every row and reports tampering. Set `SHDPA_STORAGE_PATH=/data/shdpa.db` to enable. |
+| **Slack + PagerDuty escalation** | `middleware/escalate.py` | Any non-resolved incident (escalated class, guardrail block, cost-cap hit) POSTs to a Slack webhook and/or PagerDuty v2 Events API. Dryrun mode: `SHDPA_ESCALATION_DRYRUN=1`. |
+| **FastAPI + Prometheus** | `serve.py` | `shdpa serve --port 8080` exposes `/healthz`, `/readyz`, `/metrics`, `POST /incidents`, `GET /incidents`, `/stats`. 8 metrics: incident count by class, LLM cost by provider, guardrail blocks by rule, per-incident cost / latency histograms. |
+| **docker-compose stack** | `docker-compose.yml` + `Dockerfile` | One-command local stack: Postgres + Airflow + shdpa sidecar. Healthchecks, named volumes, non-root user inside the image. |
+| **On-call runbook** | [`docs/04_runbook.md`](docs/04_runbook.md) | First-five-minutes triage table, kill switches, Prometheus alert rules, audit-verification command, debug snippets. |
+| **Prompt regression test** | `tests/test_prompt_regression.py` | Fails CI if any prompt change drops mock-eval resolution below 85 % or class accuracy below 95 %. Runs in ~1 s with $0. |
+
+All wired into the main loop: redaction runs before the first LLM call; allow-list runs before triage; persistence + escalation run after the agent finishes. Default behavior (no env vars set) is unchanged so the existing eval + tests keep working.
+
 ## Roadmap
 
 - [x] Real-LLM eval committed: Claude Sonnet 4 (v2) → 70 % resolved, 0 % hallucination.
@@ -222,8 +239,15 @@ I am not selling you snake oil. Read this section.
 - [x] Cost-meter hard-cap tests (`tests/test_cost_meter.py`).
 - [x] Eval-run fixture isolation via tmpdir (no cross-run contamination).
 - [x] Architecture diagram in README (Mermaid).
+- [x] PII / secret redaction middleware.
+- [x] SQLite persistence + tamper-evident audit log + `shdpa verify-audit`.
+- [x] Slack / PagerDuty escalation middleware.
+- [x] FastAPI HTTP surface + Prometheus `/metrics`.
+- [x] Per-repo allow-list guardrail (env-gated, default permissive).
+- [x] `docker-compose.yml` with Airflow 2.x + Postgres + the agent as a sidecar.
+- [x] On-call runbook ([`docs/04_runbook.md`](docs/04_runbook.md)).
+- [x] Prompt regression test.
 - [ ] Extend the real-LLM matrix to `gpt-4o-mini`, `claude-3-5-haiku`, `llama3-8b` for a price/quality grid.
-- [ ] `docker-compose.yml` with Airflow 2.x + Postgres + the agent as a sidecar.
 - [ ] Postgres schema-sandbox tool (apply patch → run dbt → diff before/after).
 - [ ] Held-out "wild" fixture set sourced from public Airflow issues.
 - [ ] Switch from plain function-calling loop to LangGraph **only if** the eval moves.
