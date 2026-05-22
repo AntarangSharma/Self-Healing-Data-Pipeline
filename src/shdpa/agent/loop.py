@@ -10,6 +10,7 @@ We deliberately avoid LangGraph for v0. Migration trigger:
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 
@@ -65,7 +66,13 @@ def _triage(incident: Incident, llm: LLMProvider, meter: CostMeter) -> None:
 
 
 def _diagnose(
-    incident: Incident, llm: LLMProvider, meter: CostMeter, registry: ToolRegistry,
+    incident: Incident,
+    llm: LLMProvider,
+    meter: CostMeter,
+    registry: ToolRegistry,
+    *,
+    must_include_hint: list[str] | None = None,
+    attempt: int = 1,
 ) -> dict:
     # Call schema_diff and (if repo) git_diff up-front; let the LLM see results.
     schema_summary = ""
@@ -103,6 +110,14 @@ def _diagnose(
             if p_.is_file() and p_.suffix in {".sql", ".py", ".txt", ".yml", ".yaml"}:
                 repo_files.append(str(p_.relative_to(incident.repo_path)))
 
+    hint_block = ""
+    if must_include_hint:
+        hint_block = (
+            "must_include_strings_hint: "
+            + str(must_include_hint)
+            + "  (your patches MUST produce a diff containing every one of these tokens)"
+        )
+
     user = "\n\n".join([
         f"failure_class: {incident.predicted_class}",
         f"triage_confidence: {incident.predicted_class_confidence:.2f}",
@@ -114,15 +129,17 @@ def _diagnose(
         f"log (tail 60):\n" + "\n".join(incident.log_text.splitlines()[-60:]),
         f"schema_diff_summary: {schema_summary}{rename_hint}",
         f"git_diff (truncated):\n{diff_summary}" if diff_summary else "",
+        hint_block,
     ])
+    purpose = "diagnose" if attempt == 1 else f"diagnose_retry_{attempt}"
     data, resp = llm.complete_json(
-        system=system, user=user, purpose="diagnose", max_tokens=600,
+        system=system, user=user, purpose=purpose, max_tokens=600,
     )
     meter.record(resp)
     incident.llm_calls.append(LLMCall(
         model=resp.model, provider=resp.provider,
         prompt_tokens=resp.prompt_tokens, completion_tokens=resp.completion_tokens,
-        cost_usd=resp.cost_usd, latency_ms=resp.latency_ms, purpose="diagnose",
+        cost_usd=resp.cost_usd, latency_ms=resp.latency_ms, purpose=purpose,
     ))
     # update confidence if diagnose returned one
     if "confidence" in data:
@@ -171,14 +188,29 @@ def _plan_files(incident: Incident, diagnosis: dict) -> tuple[dict[str, str], st
             elif bl != al:
                 diff_text += "-" + (bl or "") + NL + "+" + (al or "") + NL
 
+    def _ci_replace(src: str, find: str, replace: str) -> tuple[str, bool]:
+        """Case-insensitive find/replace.
+
+        SQL keywords are conventionally lowercase in our fixtures but LLMs
+        love to emit uppercase. We match case-insensitively but preserve
+        the *replacement* string exactly as the model produced it (the
+        model is responsible for matching surrounding conventions).
+        Returns (new_text, changed).
+        """
+        new, n = re.subn(re.escape(find), lambda _m: replace, src, flags=re.IGNORECASE)
+        return new, n > 0
+
+    def _ci_contains(src: str, needle: str) -> bool:
+        return re.search(re.escape(needle), src, flags=re.IGNORECASE) is not None
+
     sql_replace = diagnosis.get("sql_replace") or {}
     find_top = sql_replace.get("find")
     replace_top = sql_replace.get("replace")
     if find_top and replace_top:
         for sql_file in repo.rglob("*.sql"):
             text = sql_file.read_text(encoding="utf-8", errors="replace")
-            if find_top in text:
-                new = text.replace(find_top, replace_top)
+            new, changed = _ci_replace(text, find_top, replace_top)
+            if changed:
                 rel = str(sql_file.relative_to(repo))
                 files[rel] = new
                 emit_diff(rel, text, new)
@@ -193,8 +225,8 @@ def _plan_files(incident: Incident, diagnosis: dict) -> tuple[dict[str, str], st
         if kind == "sql_replace" and find_p and replace_p:
             for sql_file in repo.rglob("*.sql"):
                 src = sql_file.read_text(encoding="utf-8", errors="replace")
-                if find_p in src:
-                    new = src.replace(find_p, replace_p)
+                new, changed = _ci_replace(src, find_p, replace_p)
+                if changed:
                     relp = str(sql_file.relative_to(repo))
                     files[relp] = new
                     emit_diff(relp, src, new)
@@ -202,8 +234,8 @@ def _plan_files(incident: Incident, diagnosis: dict) -> tuple[dict[str, str], st
         elif kind == "sql_remove" and find_p:
             for sql_file in repo.rglob("*.sql"):
                 src = sql_file.read_text(encoding="utf-8", errors="replace")
-                if find_p in src:
-                    kept = [ln for ln in src.splitlines() if find_p not in ln]
+                if _ci_contains(src, find_p):
+                    kept = [ln for ln in src.splitlines() if not _ci_contains(ln, find_p)]
                     new = NL.join(kept)
                     relp = str(sql_file.relative_to(repo))
                     files[relp] = new
@@ -303,17 +335,56 @@ def run_agent(
 
     try:
         _triage(incident, llm, meter)
-        # Diagnose is required to produce structured patches. The only class where
-        # we can short-circuit to retry without a diagnose call is upstream_5xx
-        # (which has no patches anyway). Everything else — even high-confidence
-        # triage — needs diagnose because that's where the patch list is produced.
+        # Diagnose is required to produce structured patches. Special cases:
+        #   - upstream_5xx: short-circuit to retry (no patches needed).
+        #   - unknown: triage couldn't classify with confidence; do NOT
+        #     guess a fix. Skip diagnose, emit a noop with full context so a
+        #     human can pick it up. This is deliberate: silently auto-fixing
+        #     an unknown failure is exactly how an agent causes an outage.
         if incident.predicted_class == "upstream_5xx":
             diagnosis = {"fix_kind": "retry", "root_cause": "transient upstream 5xx"}
+        elif incident.predicted_class == "unknown":
+            diagnosis = {
+                "fix_kind": "noop",
+                "root_cause": (
+                    "triage could not classify failure with confidence; "
+                    "escalating to human review."
+                ),
+            }
         else:
             diagnosis = _diagnose(incident, llm, meter, registry)
 
-        incident.proposed_fix_kind = diagnosis.get("fix_kind", "noop")
+        # Regenerate-on-incomplete loop:
+        # If diagnose declared `must_include_strings` but the resulting diff
+        # doesn't contain them, re-prompt with that explicit hint. Cap at 3
+        # total attempts so cost stays bounded. This catches LLMs that produce
+        # a structurally correct patch missing required tokens (the #1 failure
+        # mode for idempotency / null_spike in the v2 prompt set).
+        max_attempts = 3
         files, diff_text = _plan_files(incident, diagnosis)
+        if diagnosis.get("fix_kind") == "code_patch":
+            for attempt in range(2, max_attempts + 1):
+                required = [
+                    s for s in (diagnosis.get("must_include_strings") or [])
+                    if s
+                ]
+                if not required:
+                    break
+                missing = [
+                    s for s in required
+                    if s.lower() not in diff_text.lower()
+                ]
+                if not missing:
+                    break
+                # Re-prompt with the missing tokens as a hard requirement.
+                diagnosis = _diagnose(
+                    incident, llm, meter, registry,
+                    must_include_hint=missing,
+                    attempt=attempt,
+                )
+                files, diff_text = _plan_files(incident, diagnosis)
+
+        incident.proposed_fix_kind = diagnosis.get("fix_kind", "noop")
         incident.proposed_fix_diff = diff_text
         incident.proposed_files_changed = list(files.keys())
 

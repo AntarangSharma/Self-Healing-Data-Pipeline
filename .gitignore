@@ -21,5 +21,6 @@ runs/
 node_modules/
 fixtures/
 fixtures_adversarial/
+fixtures_wild/
 .claude/
 results_real_*.jsonl

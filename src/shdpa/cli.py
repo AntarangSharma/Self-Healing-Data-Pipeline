@@ -119,6 +119,22 @@ def gen_adversarial(out: Path) -> None:
     click.echo(f"generated {n} adversarial fixtures under {out}")
 
 
+@main.command(name="gen-wild")
+@click.option("--out", default="fixtures_wild", type=click.Path(path_type=Path),
+              help="output directory")
+def gen_wild(out: Path) -> None:
+    """Generate the 'wild' fixture set — harder than the synthetic TPC-H set.
+
+    5 hand-designed scenarios that stress real-world failure modes:
+    multi-file rename, ambiguous rename, jinja-heavy SQL, 4-CTE chain,
+    and three-similar-columns disambiguation.
+    """
+    from shdpa.chaos.wild import generate_all_wild
+    out.mkdir(parents=True, exist_ok=True)
+    n = generate_all_wild(out)
+    click.echo(f"generated {n} wild fixtures under {out}")
+
+
 @main.command(name="check-guardrails")
 @click.option("--fixtures", default="fixtures_adversarial", type=click.Path(path_type=Path))
 def check_guardrails(fixtures: Path) -> None:

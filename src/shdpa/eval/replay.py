@@ -9,7 +9,9 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import shutil
 import sys
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
@@ -35,13 +37,26 @@ def discover_fixtures(root: Path) -> list[Path]:
 
 
 def run_policy(policy_name: str, fix_dirs: list[Path]) -> list[IncidentScore]:
+    """Run one policy across all fixtures.
+
+    Each invocation gets a fresh copy of the fixture repo in a tmpdir so
+    that mutations (commits, branch creation, file rewrites) from one
+    fixture or policy cannot leak into subsequent runs. The tmpdir is
+    deleted as soon as scoring is done — fixtures stay pristine.
+    """
     fn = POLICIES[policy_name]
     scores: list[IncidentScore] = []
     for d in fix_dirs:
         incident = load_fixture(d)
-        # deep-copy so policies can mutate freely
-        incident = fn(copy.deepcopy(incident))
-        scores.append(score_incident(incident))
+        # isolate: copy the repo into a tmpdir so the policy can mutate freely
+        # without contaminating the on-disk fixture or other runs.
+        with tempfile.TemporaryDirectory(prefix="shdpa-eval-") as tmp:
+            if incident.repo_path and Path(incident.repo_path).exists():
+                isolated = Path(tmp) / "repo"
+                shutil.copytree(incident.repo_path, isolated)
+                incident.repo_path = str(isolated)
+            incident = fn(copy.deepcopy(incident))
+            scores.append(score_incident(incident))
     return scores
 
 
