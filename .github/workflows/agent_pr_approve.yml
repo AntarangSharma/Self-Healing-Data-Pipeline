@@ -1,0 +1,72 @@
+# /approve comment workflow for agent-opened PRs.
+#
+# By default the agent's PRs cannot be merged. A reviewer with write access
+# comments `/approve` to greenlight the merge. Anything else is ignored.
+#
+# This is the supervised-mode flow for failure classes you don't (yet) trust.
+name: agent-pr-approve
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  approve:
+    # Only on PRs (not regular issues), and only on shdpa-branch PRs.
+    if: |
+      github.event.issue.pull_request &&
+      github.event.comment.body == '/approve'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check reviewer permission
+        id: perm
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const perm = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              username: context.payload.comment.user.login,
+            });
+            const allowed = ["admin", "maintain", "write"];
+            if (!allowed.includes(perm.data.permission)) {
+              core.setFailed(`/approve requires write+ permission; ${context.payload.comment.user.login} has ${perm.data.permission}`);
+            }
+
+      - name: Verify PR is from shdpa branch
+        id: br
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            if (!pr.data.head.ref.startsWith("shdpa/")) {
+              core.setFailed("/approve only applies to shdpa-agent PRs");
+            }
+            core.setOutput("sha", pr.data.head.sha);
+
+      - name: Approve + auto-merge
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              pull_number: context.issue.number,
+              event: "APPROVE",
+              body: ":white_check_mark: approved by `/approve` from " + context.payload.comment.user.login,
+            });
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ["shdpa-approved"],
+            });

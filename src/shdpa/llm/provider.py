@@ -54,14 +54,38 @@ def get_provider(name: str | None = None) -> LLMProvider:
 
     if name == "mock":
         from shdpa.llm.mock_provider import MockProvider
-        return MockProvider()
-    if name == "openai":
+        primary = MockProvider()
+    elif name == "openai":
         from shdpa.llm.openai_provider import OpenAIProvider
-        return OpenAIProvider()
-    if name == "anthropic":
+        primary = OpenAIProvider()
+    elif name == "anthropic":
         from shdpa.llm.anthropic_provider import AnthropicProvider
-        return AnthropicProvider()
-    if name == "ollama":
+        primary = AnthropicProvider()
+    elif name == "ollama":
         from shdpa.llm.ollama_provider import OllamaProvider
-        return OllamaProvider()
-    raise ValueError(f"Unknown LLM provider: {name!r}")
+        primary = OllamaProvider()
+    else:
+        raise ValueError(f"Unknown LLM provider: {name!r}")
+
+    fallback_name = os.getenv("SHDPA_FALLBACK_PROVIDER")
+    if fallback_name:
+        fallback_name = fallback_name.lower()
+        if fallback_name == "mock":
+            from shdpa.llm.mock_provider import MockProvider
+            fallback = MockProvider()
+        elif fallback_name == "openai":
+            from shdpa.llm.openai_provider import OpenAIProvider
+            fallback = OpenAIProvider()
+        elif fallback_name == "anthropic":
+            from shdpa.llm.anthropic_provider import AnthropicProvider
+            fallback = AnthropicProvider()
+        elif fallback_name == "ollama":
+            from shdpa.llm.ollama_provider import OllamaProvider
+            fallback = OllamaProvider()
+        else:
+            raise ValueError(f"Unknown LLM fallback provider: {fallback_name!r}")
+
+        from shdpa.llm.failover_provider import FailoverProvider
+        return FailoverProvider(primary, fallback)
+
+    return primary

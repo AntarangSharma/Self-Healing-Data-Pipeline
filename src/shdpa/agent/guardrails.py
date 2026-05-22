@@ -131,3 +131,18 @@ class Guardrails:
                     "low_confidence",
                     f"confidence {confidence:.2f} < 0.85",
                 )
+
+        # 5) Refactor cap
+        from shdpa.storage import get_default_store
+        from datetime import datetime, timedelta, timezone
+
+        store = get_default_store()
+        if store is not None:
+            since = datetime.now(timezone.utc) - timedelta(hours=24)
+            for path in files_changed:
+                count = store.count_file_patches_last_24h(path, since)
+                if count >= 2:
+                    raise GuardrailViolation(
+                        "refactor_cap_exceeded",
+                        f"file {path} has already been patched {count} times in the last 24h"
+                    )

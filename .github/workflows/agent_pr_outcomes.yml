@@ -1,0 +1,53 @@
+# Records the outcome of every agent PR (merged / closed / edited) to
+# docs/results/pr_outcomes.jsonl. This is the training signal for prompt v4
+# — when the agent's fix gets edited before merge, we want to know what the
+# human changed.
+name: agent-pr-outcomes
+
+on:
+  pull_request:
+    types: [closed, edited]
+
+permissions:
+  contents: write
+
+jobs:
+  record:
+    if: startsWith(github.event.pull_request.head.ref, 'shdpa/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Append outcome row
+        run: |
+          mkdir -p docs/results
+          python <<'PY'
+          import json, os, datetime as dt
+          pr = json.loads(os.environ["PR_JSON"])
+          out = {
+              "ts": dt.datetime.utcnow().isoformat() + "Z",
+              "number": pr["number"],
+              "head_ref": pr["head"]["ref"],
+              "merged": pr.get("merged", False),
+              "state": pr["state"],
+              "additions": pr.get("additions"),
+              "deletions": pr.get("deletions"),
+              "changed_files": pr.get("changed_files"),
+              "merged_by": (pr.get("merged_by") or {}).get("login"),
+              "labels": [l["name"] for l in pr.get("labels", [])],
+              "action": os.environ["GITHUB_EVENT_ACTION"],
+          }
+          with open("docs/results/pr_outcomes.jsonl", "a") as f:
+              f.write(json.dumps(out) + "\n")
+          PY
+        env:
+          PR_JSON: ${{ toJson(github.event.pull_request) }}
+          GITHUB_EVENT_ACTION: ${{ github.event.action }}
+
+      - name: Commit outcome row
+        run: |
+          git config user.name "shdpa-bot"
+          git config user.email "shdpa-bot@users.noreply.github.com"
+          git add docs/results/pr_outcomes.jsonl
+          git diff --cached --quiet || git commit -m "chore: record PR #${{ github.event.pull_request.number }} outcome (${{ github.event.action }})"
+          git push || true

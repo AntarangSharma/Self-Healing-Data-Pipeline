@@ -41,8 +41,12 @@ def gen_fixtures(out: Path, n_per_class: int, classes: str) -> None:
 @click.option("--fixtures", default="fixtures", type=click.Path(path_type=Path))
 @click.option("--policy", default="b0,b1,b2,ours")
 @click.option("--out", default="results.jsonl", type=click.Path(path_type=Path))
-def eval(fixtures: Path, policy: str, out: Path) -> None:
+@click.option("--dry-run", is_flag=True, help="Run in dry-run mode")
+def eval(fixtures: Path, policy: str, out: Path, dry_run: bool) -> None:
     """Run policies on fixtures and print a results table."""
+    import os
+    if dry_run:
+        os.environ["SHDPA_DRY_RUN"] = "1"
     from shdpa.eval.replay import main as replay_main
     sys.exit(replay_main([
         "--fixtures", str(fixtures),
@@ -53,7 +57,8 @@ def eval(fixtures: Path, policy: str, out: Path) -> None:
 
 @main.command()
 @click.option("--fixture", required=True, type=click.Path(exists=True, path_type=Path))
-def demo(fixture: Path) -> None:
+@click.option("--dry-run", is_flag=True, help="Run in dry-run mode")
+def demo(fixture: Path, dry_run: bool) -> None:
     """Run the agent end-to-end against a single fixture and print the resulting PR."""
     from rich.console import Console
     from rich.panel import Panel
@@ -72,7 +77,7 @@ def demo(fixture: Path) -> None:
         title="Incident",
     ))
 
-    incident = run_agent(incident)
+    incident = run_agent(incident, dry_run=dry_run)
     score = score_incident(incident)
 
     pr_action = next((a for a in incident.actions if a.kind == "pr"), None)
@@ -214,6 +219,18 @@ def verify_audit() -> None:
     for row in bad[:20]:
         click.echo(f"  incident_id={row['incident_id']} expected={row['expected_sha']} actual={row['actual_sha']}", err=True)
     sys.exit(1)
+
+
+@main.command(name="dbt-callback")
+@click.argument("project_dir", type=click.Path(exists=True, path_type=Path))
+def dbt_callback(project_dir: Path) -> None:
+    """Trigger dbt callback, sending run results from target/run_results.json."""
+    import sys
+    root = Path(__file__).resolve().parent.parent.parent
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    from dbt.adapters.shdpa_dbt_callback import main as callback_main
+    sys.exit(callback_main(["shdpa_dbt_callback", str(project_dir)]))
 
 
 if __name__ == "__main__":

@@ -187,6 +187,24 @@ class SQLiteStore:
         with self._lock:
             return [dict(r) for r in self._conn.execute(sql, params).fetchall()]
 
+    def count_file_patches_last_24h(self, file_path: str, since: datetime) -> int:
+        """Count the number of times file_path has been proposed to be changed in the last 24h.
+        """
+        count = 0
+        sql = "SELECT raw_json FROM incidents WHERE created_at >= ?"
+        with self._lock:
+            rows = self._conn.execute(sql, (since.isoformat(),)).fetchall()
+        for r in rows:
+            try:
+                incident = Incident.model_validate_json(r["raw_json"])
+                norm_target = os.path.normpath(file_path)
+                for f in incident.proposed_files_changed:
+                    if os.path.normpath(f) == norm_target:
+                        count += 1
+            except Exception:
+                pass
+        return count
+
     def aggregate(self, *, since: datetime | None = None) -> dict[str, Any]:
         """One-shot stats useful for dashboards: count, resolution rate,
         total $ spent, mean latency.

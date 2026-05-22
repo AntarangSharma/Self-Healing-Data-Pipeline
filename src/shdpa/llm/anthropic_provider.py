@@ -25,13 +25,25 @@ class AnthropicProvider:
             from anthropic import Anthropic
         except ImportError as e:
             raise RuntimeError("Install with: pip install '.[anthropic]'") from e
-        if not os.getenv("ANTHROPIC_API_KEY"):
+        from shdpa.middleware.secrets import get_secret
+        api_key = get_secret("ANTHROPIC_API_KEY")
+        if not api_key:
             raise RuntimeError("ANTHROPIC_API_KEY not set")
-        self.client = Anthropic()
-        self.model = os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-latest")
+        self.client = Anthropic(api_key=api_key)
+        self.user_model = os.getenv("ANTHROPIC_MODEL")
+        self.model = self.user_model or "claude-3-5-haiku-latest"
 
-    def _price(self, pt: int, ct: int) -> float:
-        rate_in, rate_out = PRICING.get(self.model, (1.0, 5.0))
+    def _get_model(self, purpose: str) -> str:
+        if self.user_model:
+            return self.user_model
+        if purpose == "triage":
+            return os.getenv("SHDPA_TRIAGE_MODEL") or "claude-3-5-haiku-latest"
+        if purpose.startswith("diagnose"):
+            return os.getenv("SHDPA_DIAGNOSE_MODEL") or "claude-3-5-sonnet-latest"
+        return self.model
+
+    def _price(self, model: str, pt: int, ct: int) -> float:
+        rate_in, rate_out = PRICING.get(model, (1.0, 5.0))
         return (pt * rate_in + ct * rate_out) / 1_000_000
 
     def complete(
@@ -39,8 +51,9 @@ class AnthropicProvider:
         temperature: float = 0.1, purpose: str = "",
     ) -> LLMResponse:
         t0 = time.time()
+        model = self._get_model(purpose)
         r = self.client.messages.create(
-            model=self.model, max_tokens=max_tokens, temperature=temperature,
+            model=model, max_tokens=max_tokens, temperature=temperature,
             system=system,
             messages=[{"role": "user", "content": user}],
         )
@@ -49,9 +62,9 @@ class AnthropicProvider:
         ct = r.usage.output_tokens
         return LLMResponse(
             text=text, prompt_tokens=pt, completion_tokens=ct,
-            cost_usd=self._price(pt, ct),
+            cost_usd=self._price(model, pt, ct),
             latency_ms=int((time.time() - t0) * 1000),
-            model=self.model, provider=self.name,
+            model=model, provider=self.name,
         )
 
     def complete_json(

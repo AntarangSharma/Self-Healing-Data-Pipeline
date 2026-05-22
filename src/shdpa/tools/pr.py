@@ -20,9 +20,17 @@ def _open_pr(
     title: str,
     body: str,
     files: dict[str, str],  # path -> new content
+    dry_run: bool = False,
 ) -> ToolResult:
     if not Path(repo_path).exists():
         return ToolResult(ok=False, summary=f"no repo at {repo_path}", error="no_repo")
+
+    if dry_run:
+        return ToolResult(
+            ok=True,
+            summary=f"PR dry-run: would have opened {branch}",
+            data={"url": f"dryrun://{repo_path}#branch={branch}", "branch": branch, "sha": "dryrun"},
+        )
 
     def run(*args: str) -> str:
         return subprocess.check_output(
@@ -53,7 +61,12 @@ def _open_pr(
         return ToolResult(ok=False, summary=f"git failed: {e.output[:300]!r}", error="git_error")
 
     pr_url: str | None = None
-    if shutil.which("gh") and os.getenv("GH_TOKEN"):
+    from shdpa.middleware.secrets import get_secret
+    gh_token = get_secret("GH_TOKEN")
+    if gh_token:
+        os.environ["GH_TOKEN"] = gh_token
+
+    if shutil.which("gh") and gh_token:
         try:
             run("push", "-u", "origin", branch)
             out = subprocess.check_output(
@@ -88,6 +101,7 @@ TOOL = Tool(
             "title": {"type": "string"},
             "body": {"type": "string"},
             "files": {"type": "object"},
+            "dry_run": {"type": "boolean"},
         },
         "required": ["repo_path", "branch", "title", "body", "files"],
     },

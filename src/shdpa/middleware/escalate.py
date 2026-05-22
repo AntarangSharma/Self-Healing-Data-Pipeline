@@ -125,12 +125,13 @@ def escalate(incident: Incident, *, reason: str) -> bool:
             log.warning("escalation.unexpected_error", url=url, error=repr(e))
             return False
 
-    slack_url = os.getenv("SHDPA_SLACK_WEBHOOK_URL")
+    from shdpa.middleware.secrets import get_secret
+    slack_url = get_secret("SHDPA_SLACK_WEBHOOK_URL") or get_secret("SLACK_WEBHOOK_URL")
     if slack_url and _safe_post(slack_url, _slack_body(payload)):
         log.info("escalation.slack_ok", incident_id=payload["incident_id"])
         delivered = True
 
-    pd_key = os.getenv("SHDPA_PAGERDUTY_ROUTING_KEY")
+    pd_key = get_secret("SHDPA_PAGERDUTY_ROUTING_KEY") or get_secret("PAGERDUTY_ROUTING_KEY")
     if pd_key and _safe_post("https://events.pagerduty.com/v2/enqueue",
                   _pagerduty_body(payload, pd_key)):
         log.info("escalation.pagerduty_ok", incident_id=payload["incident_id"])

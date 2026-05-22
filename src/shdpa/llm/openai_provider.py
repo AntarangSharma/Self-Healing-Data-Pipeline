@@ -25,13 +25,25 @@ class OpenAIProvider:
             from openai import OpenAI
         except ImportError as e:
             raise RuntimeError("Install with: pip install '.[openai]'") from e
-        if not os.getenv("OPENAI_API_KEY"):
+        from shdpa.middleware.secrets import get_secret
+        api_key = get_secret("OPENAI_API_KEY")
+        if not api_key:
             raise RuntimeError("OPENAI_API_KEY not set")
-        self.client = OpenAI()
-        self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        self.client = OpenAI(api_key=api_key)
+        self.user_model = os.getenv("OPENAI_MODEL")
+        self.model = self.user_model or "gpt-4o-mini"
 
-    def _price(self, pt: int, ct: int) -> float:
-        rate_in, rate_out = PRICING.get(self.model, (1.0, 3.0))
+    def _get_model(self, purpose: str) -> str:
+        if self.user_model:
+            return self.user_model
+        if purpose == "triage":
+            return os.getenv("SHDPA_TRIAGE_MODEL") or "gpt-4o-mini"
+        if purpose.startswith("diagnose"):
+            return os.getenv("SHDPA_DIAGNOSE_MODEL") or "gpt-4o"
+        return self.model
+
+    def _price(self, model: str, pt: int, ct: int) -> float:
+        rate_in, rate_out = PRICING.get(model, (1.0, 3.0))
         return (pt * rate_in + ct * rate_out) / 1_000_000
 
     def complete(
@@ -39,8 +51,9 @@ class OpenAIProvider:
         temperature: float = 0.1, purpose: str = "",
     ) -> LLMResponse:
         t0 = time.time()
+        model = self._get_model(purpose)
         r = self.client.chat.completions.create(
-            model=self.model,
+            model=model,
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             max_tokens=max_tokens,
             temperature=temperature,
@@ -50,9 +63,9 @@ class OpenAIProvider:
         ct = r.usage.completion_tokens if r.usage else 0
         return LLMResponse(
             text=text, prompt_tokens=pt, completion_tokens=ct,
-            cost_usd=self._price(pt, ct),
+            cost_usd=self._price(model, pt, ct),
             latency_ms=int((time.time() - t0) * 1000),
-            model=self.model, provider=self.name,
+            model=model, provider=self.name,
         )
 
     def complete_json(
@@ -60,9 +73,10 @@ class OpenAIProvider:
         max_tokens: int = 1024, temperature: float = 0.0, purpose: str = "",
     ) -> tuple[dict[str, Any], LLMResponse]:
         t0 = time.time()
+        model = self._get_model(purpose)
         sys2 = system + "\n\nReturn ONLY valid JSON. " + (schema_hint or "")
         r = self.client.chat.completions.create(
-            model=self.model,
+            model=model,
             messages=[{"role": "system", "content": sys2}, {"role": "user", "content": user}],
             max_tokens=max_tokens,
             temperature=temperature,
@@ -77,8 +91,8 @@ class OpenAIProvider:
             data = {}
         resp = LLMResponse(
             text=text, prompt_tokens=pt, completion_tokens=ct,
-            cost_usd=self._price(pt, ct),
+            cost_usd=self._price(model, pt, ct),
             latency_ms=int((time.time() - t0) * 1000),
-            model=self.model, provider=self.name,
+            model=model, provider=self.name,
         )
         return data, resp

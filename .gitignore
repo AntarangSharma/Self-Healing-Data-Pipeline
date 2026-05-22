@@ -24,3 +24,5 @@ fixtures_adversarial/
 fixtures_wild/
 .claude/
 results_real_*.jsonl
+.antigravitycli/
+

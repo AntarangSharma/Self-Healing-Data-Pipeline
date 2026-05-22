@@ -277,6 +277,8 @@ def _make_pr(
     registry: ToolRegistry,
     files: dict[str, str],
     diff_text: str,
+    *,
+    dry_run: bool = False,
 ) -> Action:
     branch = f"shdpa/fix-{incident.id.hex[:8]}"
     title = f"[shdpa] fix: {diagnosis.get('root_cause', 'pipeline failure')[:64]}"
@@ -311,11 +313,12 @@ def _make_pr(
         title=title,
         body=body,
         files=files,
+        dry_run=dry_run,
     )
     return Action(
         kind="pr" if r.ok else "noop",
         payload=r.data or {"error": r.error},
-        dry_run=False,
+        dry_run=dry_run,
         executed_at=None,
     )
 
@@ -326,8 +329,12 @@ def run_agent(
     llm: LLMProvider | None = None,
     meter: CostMeter | None = None,
     guardrails: Guardrails | None = None,
+    dry_run: bool = False,
 ) -> Incident:
+    import os
     t0 = time.time()
+    if not dry_run:
+        dry_run = os.getenv("SHDPA_DRY_RUN", "0").lower() in ("1", "true", "yes")
     llm = llm or get_provider()
     meter = meter or CostMeter()
     meter.reset_incident()
@@ -404,8 +411,17 @@ def run_agent(
         incident.proposed_fix_diff = diff_text
         incident.proposed_files_changed = list(files.keys())
 
+        # Sandbox validation
+        if files and incident.repo_path:
+            disable_sandbox = os.getenv("SHDPA_DISABLE_SANDBOX", "0").lower() in ("1", "true", "yes")
+            if not disable_sandbox:
+                from shdpa.middleware.sandbox import validate_patches
+                success, s_msg = validate_patches(incident.repo_path, files)
+                if not success:
+                    raise GuardrailViolation("sandbox_validation_failed", s_msg)
+
         # Build action
-        action = _make_pr(incident, diagnosis, registry, files, diff_text)
+        action = _make_pr(incident, diagnosis, registry, files, diff_text, dry_run=dry_run)
 
         # Guardrail check (even for PR — guards against forbidden_paths etc.)
         try:
