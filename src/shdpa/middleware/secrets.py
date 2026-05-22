@@ -4,6 +4,7 @@ Allows retrieving sensitive API keys and connection strings from secure vaults
 (HashiCorp Vault or AWS Secrets Manager) if configured, falling back to local
 environment variables.
 """
+
 from __future__ import annotations
 
 import json
@@ -38,7 +39,9 @@ def get_secret(key_name: str, default: str | None = None) -> str | None:
     if vault_addr and vault_path:
         token = os.getenv("VAULT_TOKEN")
         if not token:
-            log.warning("secrets.vault_missing_token", msg="VAULT_ADDR set but VAULT_TOKEN is missing")
+            log.warning(
+                "secrets.vault_missing_token", msg="VAULT_ADDR set but VAULT_TOKEN is missing"
+            )
         else:
             try:
                 import urllib.request

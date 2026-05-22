@@ -11,6 +11,7 @@ Audit log:
   evidence trail — if a row is later tampered, the hash will not match
   the JSON.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -135,17 +136,23 @@ class SQLiteStore:
                 ),
             )
             # Denormalize LLM calls so SQL `sum(cost)` over time is cheap.
-            self._conn.execute(
-                "DELETE FROM llm_calls WHERE incident_id = ?", (iid,)
-            )
+            self._conn.execute("DELETE FROM llm_calls WHERE incident_id = ?", (iid,))
             for c in incident.llm_calls:
                 self._conn.execute(
                     """INSERT INTO llm_calls
                        (incident_id, purpose, model, provider, prompt_tokens,
                         completion_tokens, cost_usd, latency_ms)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (iid, c.purpose, c.model, c.provider, c.prompt_tokens,
-                     c.completion_tokens, c.cost_usd, c.latency_ms),
+                    (
+                        iid,
+                        c.purpose,
+                        c.model,
+                        c.provider,
+                        c.prompt_tokens,
+                        c.completion_tokens,
+                        c.cost_usd,
+                        c.latency_ms,
+                    ),
                 )
             # Append-only audit row.
             self._conn.execute(
@@ -169,12 +176,17 @@ class SQLiteStore:
         return Incident.model_validate_json(row["raw_json"])
 
     def list_incidents(
-        self, *, limit: int = 50, since: datetime | None = None,
+        self,
+        *,
+        limit: int = 50,
+        since: datetime | None = None,
         predicted_class: str | None = None,
     ) -> list[dict[str, Any]]:
-        sql = "SELECT id, created_at, source, dag_id, task_id, predicted_class," \
-              " resolved, resolution_kind, total_cost_usd, total_latency_s, error" \
-              " FROM incidents WHERE 1=1"
+        sql = (
+            "SELECT id, created_at, source, dag_id, task_id, predicted_class,"
+            " resolved, resolution_kind, total_cost_usd, total_latency_s, error"
+            " FROM incidents WHERE 1=1"
+        )
         params: list[Any] = []
         if since:
             sql += " AND created_at >= ?"
@@ -188,8 +200,7 @@ class SQLiteStore:
             return [dict(r) for r in self._conn.execute(sql, params).fetchall()]
 
     def count_file_patches_last_24h(self, file_path: str, since: datetime) -> int:
-        """Count the number of times file_path has been proposed to be changed in the last 24h.
-        """
+        """Count the number of times file_path has been proposed to be changed in the last 24h."""
         count = 0
         sql = "SELECT raw_json FROM incidents WHERE created_at >= ?"
         with self._lock:
@@ -247,11 +258,13 @@ class SQLiteStore:
             ).fetchall():
                 actual = hashlib.sha256(r["raw_json"].encode("utf-8")).hexdigest()
                 if actual != r["expected"]:
-                    bad.append({
-                        "incident_id": r["id"],
-                        "expected_sha": r["expected"],
-                        "actual_sha": actual,
-                    })
+                    bad.append(
+                        {
+                            "incident_id": r["id"],
+                            "expected_sha": r["expected"],
+                            "actual_sha": actual,
+                        }
+                    )
         return bad
 
 

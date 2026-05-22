@@ -4,6 +4,7 @@ Why: the model will violate guardrails encoded only in the system prompt
 ~5% of the time. Encoding them in middleware that runs after every action
 proposal makes them structurally impossible to bypass.
 """
+
 from __future__ import annotations
 
 import fnmatch
@@ -15,7 +16,7 @@ from shdpa.models import Action, FailureClass, Incident
 
 # Classes that may be auto-executed without a human-approved PR.
 AUTO_FIX_WHITELIST: set[FailureClass] = {
-    "schema_drift",   # rename only — still opens PR, never auto-merges
+    "schema_drift",  # rename only — still opens PR, never auto-merges
     "upstream_5xx",
     "late_partition",
     "dag_import",
@@ -23,8 +24,14 @@ AUTO_FIX_WHITELIST: set[FailureClass] = {
 }
 
 DESTRUCTIVE_KEYWORDS = (
-    "drop table", "drop schema", "truncate", "delete from",
-    "rm -rf", "shutdown", "format ", "dropdatabase",
+    "drop table",
+    "drop schema",
+    "truncate",
+    "delete from",
+    "rm -rf",
+    "shutdown",
+    "format ",
+    "dropdatabase",
 )
 
 
@@ -40,7 +47,11 @@ class Guardrails:
     max_files_touched: int = 3
     max_lines_changed: int = 80
     forbidden_paths: tuple[str, ...] = (
-        "infra/**", "**/prod_*.yml", "**/prod_*.yaml", ".github/**", "secrets/**",
+        "infra/**",
+        "**/prod_*.yml",
+        "**/prod_*.yaml",
+        ".github/**",
+        "secrets/**",
     )
     require_dry_run: bool = field(
         default_factory=lambda: os.getenv("SHDPA_DRY_RUN", "true").lower() == "true"
@@ -100,7 +111,8 @@ class Guardrails:
             )
         if diff:
             n_lines = sum(
-                1 for line in diff.splitlines()
+                1
+                for line in diff.splitlines()
                 if (line.startswith("+") or line.startswith("-"))
                 and not line.startswith(("+++", "---"))
             )
@@ -144,5 +156,5 @@ class Guardrails:
                 if count >= 2:
                     raise GuardrailViolation(
                         "refactor_cap_exceeded",
-                        f"file {path} has already been patched {count} times in the last 24h"
+                        f"file {path} has already been patched {count} times in the last 24h",
                     )

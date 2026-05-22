@@ -9,6 +9,7 @@ check belongs in the default pytest suite.
 If you change a prompt and this test fails, fix the prompt or update the
 threshold deliberately — do not silently lower it.
 """
+
 from __future__ import annotations
 
 import os
@@ -31,7 +32,8 @@ CLASS_ACC_THRESHOLD = 0.95
 
 @pytest.mark.parametrize("prompt_version", ["v3"])
 def test_prompt_set_meets_threshold(
-    prompt_version: str, monkeypatch: pytest.MonkeyPatch,
+    prompt_version: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SHDPA_LLM_PROVIDER", "mock")
     monkeypatch.setenv("SHDPA_PROMPT_VERSION", prompt_version)

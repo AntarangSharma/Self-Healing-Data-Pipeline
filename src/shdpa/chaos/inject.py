@@ -5,6 +5,7 @@ Each injector:
   - writes: fixture.yaml, log.txt, schema_before.json, schema_after.json,
             repo/ (a git repo with the model files)
 """
+
 from __future__ import annotations
 
 import json
@@ -19,11 +20,13 @@ import yaml
 
 # ----------- helpers -----------
 
+
 def _init_repo(repo_path: Path, files: dict[str, str]) -> None:
     repo_path.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "init", "-q", "-b", "main", str(repo_path)], check=True)
-    subprocess.run(["git", "-C", str(repo_path), "config", "user.email", "chaos@shdpa.local"],
-                   check=True)
+    subprocess.run(
+        ["git", "-C", str(repo_path), "config", "user.email", "chaos@shdpa.local"], check=True
+    )
     subprocess.run(["git", "-C", str(repo_path), "config", "user.name", "chaos"], check=True)
     for rel, content in files.items():
         p = repo_path / rel
@@ -33,8 +36,9 @@ def _init_repo(repo_path: Path, files: dict[str, str]) -> None:
     subprocess.run(["git", "-C", str(repo_path), "commit", "-q", "-m", "initial"], check=True)
 
 
-def _write_fixture(out_dir: Path, fixture: dict, log: str,
-                   schema_before: dict, schema_after: dict) -> None:
+def _write_fixture(
+    out_dir: Path, fixture: dict, log: str, schema_before: dict, schema_after: dict
+) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "log.txt").write_text(log, encoding="utf-8")
     (out_dir / "schema_before.json").write_text(json.dumps(schema_before, indent=2))
@@ -85,6 +89,7 @@ def _model_sql(model: str, sql: str) -> dict[str, str]:
 
 # ----------- injectors -----------
 
+
 @dataclass
 class Fixture:
     id: str
@@ -121,11 +126,11 @@ def inject_schema_rename_column(out_dir: Path, seed: int = 0) -> Fixture:
         'column "{c}" does not exist\n'
         "LINE 3:     {c} as priority_label\n"
         "                ^\n"
-        "HINT:  Perhaps you meant to reference \"{table}.{n}\".\n"
+        'HINT:  Perhaps you meant to reference "{table}.{n}".\n'
         "Traceback (most recent call last):\n"
         '  File "/opt/airflow/dags/tpch.py", line 42, in run_model\n'
         "    cur.execute(sql)\n"
-        "psycopg.errors.UndefinedColumn: column \"{c}\" does not exist\n"
+        'psycopg.errors.UndefinedColumn: column "{c}" does not exist\n'
     ).format(t=table, c=old_col, n=new_col, table=table)
 
     fixture = {
@@ -178,7 +183,7 @@ def inject_schema_drop_column(out_dir: Path, seed: int = 0) -> Fixture:
     _init_repo(out_dir / "repo", _model_sql(f"mart_{table}", sql))
 
     log = (
-        f"ERROR - psycopg.errors.UndefinedColumn: column \"{col}\" does not exist\n"
+        f'ERROR - psycopg.errors.UndefinedColumn: column "{col}" does not exist\n'
         f"LINE 1: select {col}, count(*) from {table} group by 1\n"
     )
     fixture = {
@@ -222,7 +227,7 @@ def inject_upstream_5xx(out_dir: Path, seed: int = 0) -> Fixture:
         f"[2026-05-21 03:10:31] ERROR - requests.exceptions.HTTPError: "
         f"{code} Server Error: Bad Gateway for url: https://api.vendor.com/extract\n"
         f"Traceback (most recent call last):\n"
-        f"  File \"extract.py\", line 88, in main\n"
+        f'  File "extract.py", line 88, in main\n'
         f"    r.raise_for_status()\n"
         f"requests.exceptions.HTTPError: {code} Server Error\n"
     )
@@ -262,7 +267,7 @@ def inject_dep_conflict(out_dir: Path, seed: int = 0) -> Fixture:
     fid = f"dep_conflict_{pkg}_{seed:03d}"
     log = (
         f"[2026-05-21 04:01:09] ERROR - Traceback (most recent call last):\n"
-        f"  File \"/opt/airflow/dags/transform.py\", line 3, in <module>\n"
+        f'  File "/opt/airflow/dags/transform.py", line 3, in <module>\n'
         f"    import {pkg}\n"
         f"ModuleNotFoundError: No module named '{pkg}'\n"
     )
@@ -285,8 +290,11 @@ def inject_dep_conflict(out_dir: Path, seed: int = 0) -> Fixture:
         "ground_truth": {
             "failure_class": "dep_conflict",
             "root_cause_summary": f"missing/incompatible package: {pkg}",
-            "fix": {"kind": "config_change", "files_changed": ["requirements.txt"],
-                    "must_include_strings": [pkg]},
+            "fix": {
+                "kind": "config_change",
+                "files_changed": ["requirements.txt"],
+                "must_include_strings": [pkg],
+            },
             "severity": "P2",
             "auto_fixable": False,
         },
@@ -306,7 +314,10 @@ def inject_oom(out_dir: Path, seed: int = 0) -> Fixture:
         "  MemoryError: Unable to allocate 14.2 GiB for an array with shape (1900000000,)\n"
     )
     schema = {t: dict(c) for t, c in TPCH_BASE_SCHEMA.items()}
-    _init_repo(out_dir / "repo", _model_sql("bigjoin", "select * from lineitem join orders on l_orderkey=o_orderkey\n"))
+    _init_repo(
+        out_dir / "repo",
+        _model_sql("bigjoin", "select * from lineitem join orders on l_orderkey=o_orderkey\n"),
+    )
     fixture = {
         "id": fid,
         "source": "chaos",
@@ -324,8 +335,11 @@ def inject_oom(out_dir: Path, seed: int = 0) -> Fixture:
         "ground_truth": {
             "failure_class": "oom",
             "root_cause_summary": "task exceeded worker memory; needs chunked read or larger node",
-            "fix": {"kind": "config_change", "files_changed": ["models/bigjoin.sql"],
-                    "must_include_strings": ["chunk"]},
+            "fix": {
+                "kind": "config_change",
+                "files_changed": ["models/bigjoin.sql"],
+                "must_include_strings": ["chunk"],
+            },
             "severity": "P2",
             "auto_fixable": False,
         },
@@ -381,7 +395,10 @@ def inject_idempotency(out_dir: Path, seed: int = 0) -> Fixture:
         "DETAIL:  Key (o_orderkey)=(123456) already exists.\n"
     )
     schema = {t: dict(c) for t, c in TPCH_BASE_SCHEMA.items()}
-    _init_repo(out_dir / "repo", _model_sql("merge_orders", "insert into orders select * from staging.orders\n"))
+    _init_repo(
+        out_dir / "repo",
+        _model_sql("merge_orders", "insert into orders select * from staging.orders\n"),
+    )
     fixture = {
         "id": fid,
         "source": "chaos",
@@ -399,8 +416,11 @@ def inject_idempotency(out_dir: Path, seed: int = 0) -> Fixture:
         "ground_truth": {
             "failure_class": "idempotency",
             "root_cause_summary": "naive insert overlaps with previous run; needs MERGE/UPSERT",
-            "fix": {"kind": "code_patch", "files_changed": ["models/merge_orders.sql"],
-                    "must_include_strings": ["on conflict"]},
+            "fix": {
+                "kind": "code_patch",
+                "files_changed": ["models/merge_orders.sql"],
+                "must_include_strings": ["on conflict"],
+            },
             "severity": "P2",
             "auto_fixable": False,
         },
@@ -454,7 +474,7 @@ def inject_dag_import(out_dir: Path, seed: int = 0) -> Fixture:
         "  /opt/airflow/dags/tpch.py:\n"
         "    Traceback (most recent call last):\n"
         '      File "/opt/airflow/dags/tpch.py", line 8, in <module>\n'
-        "        dag = DAG(\"tpch\", schedule=\"@daily\", start_date=datetime(2026,5,1))\n"
+        '        dag = DAG("tpch", schedule="@daily", start_date=datetime(2026,5,1))\n'
         "    NameError: name 'datetime' is not defined\n"
     )
     schema = {t: dict(c) for t, c in TPCH_BASE_SCHEMA.items()}
@@ -481,8 +501,11 @@ def inject_dag_import(out_dir: Path, seed: int = 0) -> Fixture:
         "ground_truth": {
             "failure_class": "dag_import",
             "root_cause_summary": "missing `from datetime import datetime` in DAG file",
-            "fix": {"kind": "code_patch", "files_changed": ["dags/tpch.py"],
-                    "must_include_strings": ["from datetime import datetime"]},
+            "fix": {
+                "kind": "code_patch",
+                "files_changed": ["dags/tpch.py"],
+                "must_include_strings": ["from datetime import datetime"],
+            },
             "severity": "P1",
             "auto_fixable": True,
         },
@@ -521,8 +544,11 @@ def inject_null_spike(out_dir: Path, seed: int = 0) -> Fixture:
         "ground_truth": {
             "failure_class": "null_spike",
             "root_cause_summary": f"sudden null rate on {col}; upstream issue, PR-only",
-            "fix": {"kind": "code_patch", "files_changed": ["models/dq_check.sql"],
-                    "must_include_strings": [col, "is not null"]},
+            "fix": {
+                "kind": "code_patch",
+                "files_changed": ["models/dq_check.sql"],
+                "must_include_strings": [col, "is not null"],
+            },
             "severity": "P3",
             "auto_fixable": False,
         },

@@ -5,6 +5,7 @@ Resolution scoring rules (semantic match against ground truth):
                 AND a non-empty diff exists
   - retry / config_change / secret_rotate / noop: predicted fix_kind matches exactly
 """
+
 from __future__ import annotations
 
 import math
@@ -25,8 +26,8 @@ class IncidentScore:
     fix_kind_predicted: str
     fix_kind_truth: str
     fix_correct: bool
-    resolved: bool        # produced an actionable result (PR or retry) matching ground truth
-    hallucinated: bool    # diff references a string that does not appear in any repo file
+    resolved: bool  # produced an actionable result (PR or retry) matching ground truth
+    hallucinated: bool  # diff references a string that does not appear in any repo file
     cost_usd: float
     latency_s: float
     error: str | None
@@ -70,11 +71,8 @@ def score_incident(incident: Incident) -> IncidentScore:
 
     fix_correct = False
     if fix_kind_truth == "code_patch":
-        fix_correct = (
-            fix_kind_pred == "code_patch"
-            and _diff_contains_all(
-                incident.proposed_fix_diff or "", gt.fix.must_include_strings
-            )
+        fix_correct = fix_kind_pred == "code_patch" and _diff_contains_all(
+            incident.proposed_fix_diff or "", gt.fix.must_include_strings
         )
     else:
         fix_correct = fix_kind_pred == fix_kind_truth
@@ -91,7 +89,8 @@ def score_incident(incident: Incident) -> IncidentScore:
         # only flag if it claims a column not present in either the diff or the repo
         # crude but effective for v0
         suspicious = [
-            s for s in (gt.fix.must_include_strings or [])
+            s
+            for s in (gt.fix.must_include_strings or [])
             if s and s.lower() not in (incident.proposed_fix_diff or "").lower()
         ]
         present = _grep_repo(incident.repo_path, suspicious)

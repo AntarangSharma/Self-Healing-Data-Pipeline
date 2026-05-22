@@ -1,4 +1,5 @@
 """OpenAI provider. Requires `pip install openai` + OPENAI_API_KEY."""
+
 from __future__ import annotations
 
 import json
@@ -26,6 +27,7 @@ class OpenAIProvider:
         except ImportError as e:
             raise RuntimeError("Install with: pip install '.[openai]'") from e
         from shdpa.middleware.secrets import get_secret
+
         api_key = get_secret("OPENAI_API_KEY")
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY not set")
@@ -47,8 +49,13 @@ class OpenAIProvider:
         return (pt * rate_in + ct * rate_out) / 1_000_000
 
     def complete(
-        self, system: str, user: str, *, max_tokens: int = 1024,
-        temperature: float = 0.1, purpose: str = "",
+        self,
+        system: str,
+        user: str,
+        *,
+        max_tokens: int = 1024,
+        temperature: float = 0.1,
+        purpose: str = "",
     ) -> LLMResponse:
         t0 = time.time()
         model = self._get_model(purpose)
@@ -62,15 +69,24 @@ class OpenAIProvider:
         pt = r.usage.prompt_tokens if r.usage else 0
         ct = r.usage.completion_tokens if r.usage else 0
         return LLMResponse(
-            text=text, prompt_tokens=pt, completion_tokens=ct,
+            text=text,
+            prompt_tokens=pt,
+            completion_tokens=ct,
             cost_usd=self._price(model, pt, ct),
             latency_ms=int((time.time() - t0) * 1000),
-            model=model, provider=self.name,
+            model=model,
+            provider=self.name,
         )
 
     def complete_json(
-        self, system: str, user: str, *, schema_hint: str = "",
-        max_tokens: int = 1024, temperature: float = 0.0, purpose: str = "",
+        self,
+        system: str,
+        user: str,
+        *,
+        schema_hint: str = "",
+        max_tokens: int = 1024,
+        temperature: float = 0.0,
+        purpose: str = "",
     ) -> tuple[dict[str, Any], LLMResponse]:
         t0 = time.time()
         model = self._get_model(purpose)
@@ -90,9 +106,12 @@ class OpenAIProvider:
         except json.JSONDecodeError:
             data = {}
         resp = LLMResponse(
-            text=text, prompt_tokens=pt, completion_tokens=ct,
+            text=text,
+            prompt_tokens=pt,
+            completion_tokens=ct,
             cost_usd=self._price(model, pt, ct),
             latency_ms=int((time.time() - t0) * 1000),
-            model=model, provider=self.name,
+            model=model,
+            provider=self.name,
         )
         return data, resp

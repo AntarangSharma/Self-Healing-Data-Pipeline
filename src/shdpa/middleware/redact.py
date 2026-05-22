@@ -9,6 +9,7 @@ The redactor runs BEFORE any LLM call. It is deliberately over-aggressive:
 false positives mean "the LLM sees `<REDACTED:api_key>` instead of the real
 key" which is fine; false negatives mean "the key leaks" which is not.
 """
+
 from __future__ import annotations
 
 import os
@@ -22,7 +23,10 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     # Cloud provider API keys
     ("aws_access_key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
     ("aws_secret_key", re.compile(r"\b[A-Za-z0-9/+=]{40}\b(?=.*aws)", re.IGNORECASE)),
-    ("gcp_service_account", re.compile(r"-----BEGIN PRIVATE KEY-----[\s\S]+?-----END PRIVATE KEY-----")),
+    (
+        "gcp_service_account",
+        re.compile(r"-----BEGIN PRIVATE KEY-----[\s\S]+?-----END PRIVATE KEY-----"),
+    ),
     # LLM provider keys (anthropic FIRST — its prefix sk-ant- also matches
     # the openai pattern, so we must redact it under the right label)
     ("anthropic_key", re.compile(r"\bsk-ant-[A-Za-z0-9_-]{20,}\b")),
@@ -31,21 +35,28 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("github_token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b")),
     ("github_oauth", re.compile(r"\b[0-9a-f]{40}\b(?=.*github)", re.IGNORECASE)),
     # Generic high-entropy bearer tokens
-    ("bearer_token", re.compile(
-        r"(?i)(?:bearer|authorization:\s*bearer)\s+([A-Za-z0-9._\-+/=]{20,})"
-    )),
+    (
+        "bearer_token",
+        re.compile(r"(?i)(?:bearer|authorization:\s*bearer)\s+([A-Za-z0-9._\-+/=]{20,})"),
+    ),
     # JWTs
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")),
     # SSH private keys
-    ("ssh_private_key", re.compile(
-        r"-----BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----[\s\S]+?"
-        r"-----END (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----"
-    )),
+    (
+        "ssh_private_key",
+        re.compile(
+            r"-----BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----[\s\S]+?"
+            r"-----END (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----"
+        ),
+    ),
     # Database URLs with embedded passwords:  postgres://user:pass@host/db
-    ("db_url_with_password", re.compile(
-        r"\b(?:postgres|postgresql|mysql|mongodb|redis)(?:\+\w+)?://"
-        r"[^:\s/]+:[^@\s]+@[^\s'\"]+"
-    )),
+    (
+        "db_url_with_password",
+        re.compile(
+            r"\b(?:postgres|postgresql|mysql|mongodb|redis)(?:\+\w+)?://"
+            r"[^:\s/]+:[^@\s]+@[^\s'\"]+"
+        ),
+    ),
     # Email addresses
     ("email", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
     # Credit cards (very loose — 13-19 digits with optional spaces/dashes)

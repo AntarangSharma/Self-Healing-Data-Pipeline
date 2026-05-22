@@ -1,4 +1,5 @@
 """Schema diff tool. Diffs information_schema-shaped JSON before/after."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -57,9 +58,7 @@ def _diff_schema(
     if removals:
         parts.append(f"removed: {removals}")
     if renames:
-        parts.append(
-            "likely renames: " + ", ".join(f"{t}.{r}->{a}" for t, r, a in renames)
-        )
+        parts.append("likely renames: " + ", ".join(f"{t}.{r}->{a}" for t, r, a in renames))
     if retypes:
         parts.append("retyped: " + ", ".join(f"{t}.{c} {b}->{a}" for t, c, b, a in retypes))
     summary = "; ".join(parts) or "no schema differences"
@@ -71,9 +70,7 @@ def _diff_schema(
             "added": additions,
             "removed": removals,
             "renames": [{"table": t, "from": r, "to": a} for t, r, a in renames],
-            "retypes": [
-                {"table": t, "column": c, "from": b, "to": a} for t, c, b, a in retypes
-            ],
+            "retypes": [{"table": t, "column": c, "from": b, "to": a} for t, c, b, a in retypes],
         },
     )
 

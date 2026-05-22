@@ -4,6 +4,7 @@ The single most important safety claim of this project is that an LLM-agent
 loop CANNOT silently run up an unbounded bill. These tests verify the hard
 cap actually trips and that the agent halts cleanly when it does.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -80,7 +81,9 @@ def test_cost_meter_halts_agent_loop_cleanly() -> None:
     inc = Incident(
         source="replay",
         log_text="generic failure",
-        dag_id="d", task_id="t", run_id="r",
+        dag_id="d",
+        task_id="t",
+        run_id="r",
     )
     meter = CostMeter(per_incident_cap=0.000001, total_cap=10.00)  # impossibly small
     out = run_agent(inc, meter=meter)

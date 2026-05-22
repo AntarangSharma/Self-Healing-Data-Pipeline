@@ -2,6 +2,7 @@
 
 Wraps a primary and fallback provider to achieve outage-resiliency.
 """
+
 from __future__ import annotations
 
 import structlog
@@ -63,7 +64,12 @@ class FailoverProvider:
     ) -> tuple[dict[str, Any], LLMResponse]:
         try:
             return self.primary.complete_json(
-                system, user, schema_hint=schema_hint, max_tokens=max_tokens, temperature=temperature, purpose=purpose
+                system,
+                user,
+                schema_hint=schema_hint,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                purpose=purpose,
             )
         except Exception as e:
             log.warning(
@@ -73,5 +79,10 @@ class FailoverProvider:
                 error=str(e),
             )
             return self.fallback.complete_json(
-                system, user, schema_hint=schema_hint, max_tokens=max_tokens, temperature=temperature, purpose=purpose
+                system,
+                user,
+                schema_hint=schema_hint,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                purpose=purpose,
             )

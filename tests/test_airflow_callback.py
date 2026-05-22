@@ -61,9 +61,10 @@ def test_airflow_callback_post_format():
         "dag": mock_dag,
     }
 
-    with patch("shdpa_callback.urlopen") as mock_urlopen, \
-         patch("shdpa_callback.Request") as mock_req_class:
-
+    with (
+        patch("shdpa_callback.urlopen") as mock_urlopen,
+        patch("shdpa_callback.Request") as mock_req_class,
+    ):
         mock_resp = MagicMock()
         mock_resp.status = 200
         mock_urlopen.return_value.__enter__.return_value = mock_resp

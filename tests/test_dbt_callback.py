@@ -62,7 +62,7 @@ def test_dbt_callback_main(tmp_path):
                 "status": "success",
                 "message": None,
                 "compiled_code": None,
-            }
+            },
         ]
     }
     (target_dir / "run_results.json").write_text(json.dumps(run_results))

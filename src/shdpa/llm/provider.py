@@ -4,6 +4,7 @@ Selection: env var SHDPA_LLM_PROVIDER ∈ {mock, openai, anthropic, ollama}.
 Each provider exposes the same `complete()` and `complete_json()` interface
 so the agent never knows which one it's talking to.
 """
+
 from __future__ import annotations
 
 import os
@@ -54,15 +55,19 @@ def get_provider(name: str | None = None) -> LLMProvider:
 
     if name == "mock":
         from shdpa.llm.mock_provider import MockProvider
+
         primary = MockProvider()
     elif name == "openai":
         from shdpa.llm.openai_provider import OpenAIProvider
+
         primary = OpenAIProvider()
     elif name == "anthropic":
         from shdpa.llm.anthropic_provider import AnthropicProvider
+
         primary = AnthropicProvider()
     elif name == "ollama":
         from shdpa.llm.ollama_provider import OllamaProvider
+
         primary = OllamaProvider()
     else:
         raise ValueError(f"Unknown LLM provider: {name!r}")
@@ -72,20 +77,25 @@ def get_provider(name: str | None = None) -> LLMProvider:
         fallback_name = fallback_name.lower()
         if fallback_name == "mock":
             from shdpa.llm.mock_provider import MockProvider
+
             fallback = MockProvider()
         elif fallback_name == "openai":
             from shdpa.llm.openai_provider import OpenAIProvider
+
             fallback = OpenAIProvider()
         elif fallback_name == "anthropic":
             from shdpa.llm.anthropic_provider import AnthropicProvider
+
             fallback = AnthropicProvider()
         elif fallback_name == "ollama":
             from shdpa.llm.ollama_provider import OllamaProvider
+
             fallback = OllamaProvider()
         else:
             raise ValueError(f"Unknown LLM fallback provider: {fallback_name!r}")
 
         from shdpa.llm.failover_provider import FailoverProvider
+
         return FailoverProvider(primary, fallback)
 
     return primary

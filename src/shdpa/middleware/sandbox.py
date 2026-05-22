@@ -4,6 +4,7 @@ Applies proposed file changes to the repository path, runs validation/compilatio
 commands (such as `dbt compile`), and ensures the repository is restored back
 to its original clean state afterwards.
 """
+
 from __future__ import annotations
 
 import os
@@ -78,8 +79,13 @@ def validate_patches(repo_path: str, files: dict[str, str]) -> tuple[bool, str]:
 
         if res.returncode != 0:
             err_msg = res.stderr or res.stdout or "(no output)"
-            log.warning("sandbox.validation_failed", command=cmd, code=res.returncode, error=err_msg)
-            return False, f"Sandbox validation command '{cmd}' failed with code {res.returncode}. Output:\n{err_msg}"
+            log.warning(
+                "sandbox.validation_failed", command=cmd, code=res.returncode, error=err_msg
+            )
+            return (
+                False,
+                f"Sandbox validation command '{cmd}' failed with code {res.returncode}. Output:\n{err_msg}",
+            )
 
         log.info("sandbox.validation_passed", command=cmd)
         return True, "Sandbox validation passed."

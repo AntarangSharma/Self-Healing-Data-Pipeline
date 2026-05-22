@@ -3,6 +3,7 @@
 Version: pass `version=` explicitly, or set env var SHDPA_PROMPT_VERSION.
 v1 is the stable initial release; v2 is real-LLM-tuned with per-class patch examples.
 """
+
 from __future__ import annotations
 
 import os

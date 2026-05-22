@@ -1,4 +1,5 @@
 """Anthropic provider. Requires `pip install anthropic` + ANTHROPIC_API_KEY."""
+
 from __future__ import annotations
 
 import json
@@ -26,6 +27,7 @@ class AnthropicProvider:
         except ImportError as e:
             raise RuntimeError("Install with: pip install '.[anthropic]'") from e
         from shdpa.middleware.secrets import get_secret
+
         api_key = get_secret("ANTHROPIC_API_KEY")
         if not api_key:
             raise RuntimeError("ANTHROPIC_API_KEY not set")
@@ -47,13 +49,20 @@ class AnthropicProvider:
         return (pt * rate_in + ct * rate_out) / 1_000_000
 
     def complete(
-        self, system: str, user: str, *, max_tokens: int = 1024,
-        temperature: float = 0.1, purpose: str = "",
+        self,
+        system: str,
+        user: str,
+        *,
+        max_tokens: int = 1024,
+        temperature: float = 0.1,
+        purpose: str = "",
     ) -> LLMResponse:
         t0 = time.time()
         model = self._get_model(purpose)
         r = self.client.messages.create(
-            model=model, max_tokens=max_tokens, temperature=temperature,
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
             system=system,
             messages=[{"role": "user", "content": user}],
         )
@@ -61,18 +70,29 @@ class AnthropicProvider:
         pt = r.usage.input_tokens
         ct = r.usage.output_tokens
         return LLMResponse(
-            text=text, prompt_tokens=pt, completion_tokens=ct,
+            text=text,
+            prompt_tokens=pt,
+            completion_tokens=ct,
             cost_usd=self._price(model, pt, ct),
             latency_ms=int((time.time() - t0) * 1000),
-            model=model, provider=self.name,
+            model=model,
+            provider=self.name,
         )
 
     def complete_json(
-        self, system: str, user: str, *, schema_hint: str = "",
-        max_tokens: int = 1024, temperature: float = 0.0, purpose: str = "",
+        self,
+        system: str,
+        user: str,
+        *,
+        schema_hint: str = "",
+        max_tokens: int = 1024,
+        temperature: float = 0.0,
+        purpose: str = "",
     ) -> tuple[dict[str, Any], LLMResponse]:
         sys2 = system + "\n\nReturn ONLY a single JSON object, no prose. " + (schema_hint or "")
-        resp = self.complete(sys2, user, max_tokens=max_tokens, temperature=temperature, purpose=purpose)
+        resp = self.complete(
+            sys2, user, max_tokens=max_tokens, temperature=temperature, purpose=purpose
+        )
         text = resp.text.strip()
         # tolerate ```json fences
         if text.startswith("```"):
@@ -83,6 +103,7 @@ class AnthropicProvider:
         except json.JSONDecodeError:
             # try to find a {...} substring
             import re as _re
+
             m = _re.search(r"\{.*\}", text, _re.DOTALL)
             data = json.loads(m.group(0)) if m else {}
         return data, resp

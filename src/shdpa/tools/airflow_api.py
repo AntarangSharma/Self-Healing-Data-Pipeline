@@ -2,6 +2,7 @@
 
 Provides endpoints to clear task instances (triggering retries) and check their status.
 """
+
 from __future__ import annotations
 
 import base64
@@ -14,28 +15,30 @@ from typing import Any
 from shdpa.tools.registry import Tool, ToolResult
 
 
-def _airflow_request(endpoint: str, method: str = "GET", data: dict[str, Any] | None = None) -> tuple[int, dict[str, Any] | None, str | None]:
+def _airflow_request(
+    endpoint: str, method: str = "GET", data: dict[str, Any] | None = None
+) -> tuple[int, dict[str, Any] | None, str | None]:
     api_url = os.getenv("AIRFLOW_API_URL", "http://localhost:8081/api/v1").rstrip("/")
     user = os.getenv("AIRFLOW_API_USER", "admin")
     password = os.getenv("AIRFLOW_API_PASSWORD", "admin")
-    
+
     url = f"{api_url}/{endpoint.lstrip('/')}"
     headers = {
         "Content-Type": "application/json",
         "User-Agent": "shdpa-agent/0.1",
     }
-    
+
     # Basic Authentication
     auth_str = f"{user}:{password}"
     b64_auth = base64.b64encode(auth_str.encode("utf-8")).decode("utf-8")
     headers["Authorization"] = f"Basic {b64_auth}"
-    
+
     req_data = None
     if data is not None:
         req_data = json.dumps(data).encode("utf-8")
-        
+
     req = urllib.request.Request(url, data=req_data, headers=headers, method=method)
-    
+
     try:
         with urllib.request.urlopen(req, timeout=15) as response:
             resp_body = response.read().decode("utf-8")
@@ -60,9 +63,13 @@ def clear_airflow_task(dag_id: str, task_id: str, run_id: str) -> ToolResult:
         "task_ids": [task_id],
         "dag_run_id": run_id,
     }
-    status, res, err = _airflow_request(f"dags/{dag_id}/clearTaskInstances", method="POST", data=payload)
+    status, res, err = _airflow_request(
+        f"dags/{dag_id}/clearTaskInstances", method="POST", data=payload
+    )
     if status == 200:
-        return ToolResult(ok=True, summary=f"Task {dag_id}.{task_id} cleared successfully", data=res)
+        return ToolResult(
+            ok=True, summary=f"Task {dag_id}.{task_id} cleared successfully", data=res
+        )
     return ToolResult(ok=False, summary=f"Failed to clear task: {err}", error=f"status_{status}")
 
 
@@ -72,7 +79,9 @@ def get_airflow_task_status(dag_id: str, task_id: str, run_id: str) -> ToolResul
     if status == 200 and res:
         state = res.get("state", "none")
         return ToolResult(ok=True, summary=f"Task state: {state}", data={"state": state})
-    return ToolResult(ok=False, summary=f"Failed to get task state: {err}", error=f"status_{status}")
+    return ToolResult(
+        ok=False, summary=f"Failed to get task state: {err}", error=f"status_{status}"
+    )
 
 
 CLEAR_TASK_TOOL = Tool(

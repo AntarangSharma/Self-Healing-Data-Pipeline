@@ -18,6 +18,7 @@ These are designed to fail more often than the TPC-H set. A model that hits
 ≥ 60 % here is meaningfully better than one that hits 90 % on the synthetic
 set, because the failure modes are closer to production reality.
 """
+
 from __future__ import annotations
 
 import json
@@ -63,19 +64,25 @@ def wild_multi_file_rename(out_dir: Path, seed: int = 0) -> Fixture:
     }
     repo_path = out_dir / "repo"
     _init_repo(repo_path, files)
-    schema_before = {"orders": {"o_orderkey": "integer", "o_custkey": "integer",
-                                "o_priority": "varchar"}}
-    schema_after = {"orders": {"o_orderkey": "integer", "o_custkey": "integer",
-                               "priority_level": "varchar"}}
-    log = _wild_log("psycopg.errors.UndefinedColumn",
-                    'column "o_priority" does not exist', "mart_orders.py")
+    schema_before = {
+        "orders": {"o_orderkey": "integer", "o_custkey": "integer", "o_priority": "varchar"}
+    }
+    schema_after = {
+        "orders": {"o_orderkey": "integer", "o_custkey": "integer", "priority_level": "varchar"}
+    }
+    log = _wild_log(
+        "psycopg.errors.UndefinedColumn", 'column "o_priority" does not exist', "mart_orders.py"
+    )
     fixture = {
         "id": fid,
         "source": "chaos",
         "inputs": {
-            "log_path": "log.txt", "repo_path": "repo",
-            "schema_before": "schema_before.json", "schema_after": "schema_after.json",
-            "dag_id": "mart_orders_dag", "task_id": "mart_orders",
+            "log_path": "log.txt",
+            "repo_path": "repo",
+            "schema_before": "schema_before.json",
+            "schema_after": "schema_after.json",
+            "dag_id": "mart_orders_dag",
+            "task_id": "mart_orders",
             "run_id": f"scheduled__seed={seed}",
             "exception_type": "psycopg.errors.UndefinedColumn",
             "exception_message": 'column "o_priority" does not exist',
@@ -85,14 +92,19 @@ def wild_multi_file_rename(out_dir: Path, seed: int = 0) -> Fixture:
             "root_cause_summary": "upstream renamed orders.o_priority to priority_level (3 files reference it)",
             "fix": {
                 "kind": "code_patch",
-                "files_changed": ["models/stg_orders.sql", "models/int_orders_priority.sql",
-                                  "models/mart_orders.sql"],
+                "files_changed": [
+                    "models/stg_orders.sql",
+                    "models/int_orders_priority.sql",
+                    "models/mart_orders.sql",
+                ],
                 "must_include_strings": ["o_priority", "priority_level"],
             },
-            "severity": "P1", "auto_fixable": True,
+            "severity": "P1",
+            "auto_fixable": True,
         },
         "provenance": {"chaos_seed": seed, "injected_by": "wild_multi_file_rename"},
-        "license": "MIT", "wild": True,
+        "license": "MIT",
+        "wild": True,
     }
     _write_fixture(out_dir, fixture, log, schema_before, schema_after)
     return Fixture(id=fid)
@@ -114,16 +126,27 @@ def wild_ambiguous_rename(out_dir: Path, seed: int = 0) -> Fixture:
     repo_path = out_dir / "repo"
     _init_repo(repo_path, files)
     schema_before = {"users": {"user_id": "integer", "name": "varchar", "email": "varchar"}}
-    schema_after = {"users": {"customer_id": "integer", "account_id": "integer",
-                              "name": "varchar", "email": "varchar"}}
-    log = _wild_log("psycopg.errors.UndefinedColumn",
-                    'column "user_id" does not exist', "dim_user.py")
+    schema_after = {
+        "users": {
+            "customer_id": "integer",
+            "account_id": "integer",
+            "name": "varchar",
+            "email": "varchar",
+        }
+    }
+    log = _wild_log(
+        "psycopg.errors.UndefinedColumn", 'column "user_id" does not exist', "dim_user.py"
+    )
     fixture = {
-        "id": fid, "source": "chaos",
+        "id": fid,
+        "source": "chaos",
         "inputs": {
-            "log_path": "log.txt", "repo_path": "repo",
-            "schema_before": "schema_before.json", "schema_after": "schema_after.json",
-            "dag_id": "dim_user_dag", "task_id": "dim_user",
+            "log_path": "log.txt",
+            "repo_path": "repo",
+            "schema_before": "schema_before.json",
+            "schema_after": "schema_after.json",
+            "dag_id": "dim_user_dag",
+            "task_id": "dim_user",
             "run_id": f"scheduled__seed={seed}",
             "exception_type": "psycopg.errors.UndefinedColumn",
             "exception_message": 'column "user_id" does not exist',
@@ -139,10 +162,12 @@ def wild_ambiguous_rename(out_dir: Path, seed: int = 0) -> Fixture:
                 # "would have caused a P1 in prod"
                 "must_include_strings": ["user_id", "customer_id"],
             },
-            "severity": "P1", "auto_fixable": True,
+            "severity": "P1",
+            "auto_fixable": True,
         },
         "provenance": {"chaos_seed": seed, "injected_by": "wild_ambiguous_rename"},
-        "license": "MIT", "wild": True,
+        "license": "MIT",
+        "wild": True,
     }
     _write_fixture(out_dir, fixture, log, schema_before, schema_after)
     return Fixture(id=fid)
@@ -165,18 +190,35 @@ def wild_jinja_heavy(out_dir: Path, seed: int = 0) -> Fixture:
     }
     repo_path = out_dir / "repo"
     _init_repo(repo_path, files)
-    schema_before = {"orders": {"o_orderkey": "integer", "o_totalprice": "numeric",
-                                "o_orderstatus": "char(1)", "o_orderdate": "date"}}
-    schema_after = {"orders": {"o_orderkey": "integer", "o_totalprice": "numeric",
-                               "order_status": "varchar", "o_orderdate": "date"}}
-    log = _wild_log("psycopg.errors.UndefinedColumn",
-                    'column "o_orderstatus" does not exist', "mart_revenue.py")
+    schema_before = {
+        "orders": {
+            "o_orderkey": "integer",
+            "o_totalprice": "numeric",
+            "o_orderstatus": "char(1)",
+            "o_orderdate": "date",
+        }
+    }
+    schema_after = {
+        "orders": {
+            "o_orderkey": "integer",
+            "o_totalprice": "numeric",
+            "order_status": "varchar",
+            "o_orderdate": "date",
+        }
+    }
+    log = _wild_log(
+        "psycopg.errors.UndefinedColumn", 'column "o_orderstatus" does not exist', "mart_revenue.py"
+    )
     fixture = {
-        "id": fid, "source": "chaos",
+        "id": fid,
+        "source": "chaos",
         "inputs": {
-            "log_path": "log.txt", "repo_path": "repo",
-            "schema_before": "schema_before.json", "schema_after": "schema_after.json",
-            "dag_id": "mart_revenue_dag", "task_id": "mart_revenue",
+            "log_path": "log.txt",
+            "repo_path": "repo",
+            "schema_before": "schema_before.json",
+            "schema_after": "schema_after.json",
+            "dag_id": "mart_revenue_dag",
+            "task_id": "mart_revenue",
             "run_id": f"scheduled__seed={seed}",
             "exception_type": "psycopg.errors.UndefinedColumn",
             "exception_message": 'column "o_orderstatus" does not exist',
@@ -189,10 +231,12 @@ def wild_jinja_heavy(out_dir: Path, seed: int = 0) -> Fixture:
                 "files_changed": ["models/mart_revenue.sql"],
                 "must_include_strings": ["o_orderstatus", "order_status"],
             },
-            "severity": "P2", "auto_fixable": True,
+            "severity": "P2",
+            "auto_fixable": True,
         },
         "provenance": {"chaos_seed": seed, "injected_by": "wild_jinja_heavy"},
-        "license": "MIT", "wild": True,
+        "license": "MIT",
+        "wild": True,
     }
     _write_fixture(out_dir, fixture, log, schema_before, schema_after)
     return Fixture(id=fid)
@@ -224,18 +268,35 @@ def wild_cte_chain(out_dir: Path, seed: int = 0) -> Fixture:
     }
     repo_path = out_dir / "repo"
     _init_repo(repo_path, files)
-    schema_before = {"orders": {"o_orderkey": "integer", "o_totalprice": "numeric",
-                                "o_clerk": "varchar", "o_orderstatus": "char(1)"}}
-    schema_after = {"orders": {"o_orderkey": "integer", "o_totalprice": "numeric",
-                               "clerk_name": "varchar", "o_orderstatus": "char(1)"}}
-    log = _wild_log("psycopg.errors.UndefinedColumn",
-                    'column "o_clerk" does not exist', "dim_revenue.py")
+    schema_before = {
+        "orders": {
+            "o_orderkey": "integer",
+            "o_totalprice": "numeric",
+            "o_clerk": "varchar",
+            "o_orderstatus": "char(1)",
+        }
+    }
+    schema_after = {
+        "orders": {
+            "o_orderkey": "integer",
+            "o_totalprice": "numeric",
+            "clerk_name": "varchar",
+            "o_orderstatus": "char(1)",
+        }
+    }
+    log = _wild_log(
+        "psycopg.errors.UndefinedColumn", 'column "o_clerk" does not exist', "dim_revenue.py"
+    )
     fixture = {
-        "id": fid, "source": "chaos",
+        "id": fid,
+        "source": "chaos",
         "inputs": {
-            "log_path": "log.txt", "repo_path": "repo",
-            "schema_before": "schema_before.json", "schema_after": "schema_after.json",
-            "dag_id": "dim_revenue_dag", "task_id": "dim_revenue",
+            "log_path": "log.txt",
+            "repo_path": "repo",
+            "schema_before": "schema_before.json",
+            "schema_after": "schema_after.json",
+            "dag_id": "dim_revenue_dag",
+            "task_id": "dim_revenue",
             "run_id": f"scheduled__seed={seed}",
             "exception_type": "psycopg.errors.UndefinedColumn",
             "exception_message": 'column "o_clerk" does not exist',
@@ -248,10 +309,12 @@ def wild_cte_chain(out_dir: Path, seed: int = 0) -> Fixture:
                 "files_changed": ["models/dim_revenue.sql"],
                 "must_include_strings": ["o_clerk", "clerk_name"],
             },
-            "severity": "P2", "auto_fixable": True,
+            "severity": "P2",
+            "auto_fixable": True,
         },
         "provenance": {"chaos_seed": seed, "injected_by": "wild_cte_chain"},
-        "license": "MIT", "wild": True,
+        "license": "MIT",
+        "wild": True,
     }
     _write_fixture(out_dir, fixture, log, schema_before, schema_after)
     return Fixture(id=fid)
@@ -273,18 +336,35 @@ def wild_similar_columns(out_dir: Path, seed: int = 0) -> Fixture:
     }
     repo_path = out_dir / "repo"
     _init_repo(repo_path, files)
-    schema_before = {"orders": {"o_orderkey": "integer", "o_orderdate": "date",
-                                "o_ordered_at": "timestamp", "o_order_dt": "date"}}
-    schema_after = {"orders": {"o_orderkey": "integer", "o_order_date": "date",
-                               "o_ordered_at": "timestamp", "o_order_dt": "date"}}
-    log = _wild_log("psycopg.errors.UndefinedColumn",
-                    'column "o_orderdate" does not exist', "fact_orders.py")
+    schema_before = {
+        "orders": {
+            "o_orderkey": "integer",
+            "o_orderdate": "date",
+            "o_ordered_at": "timestamp",
+            "o_order_dt": "date",
+        }
+    }
+    schema_after = {
+        "orders": {
+            "o_orderkey": "integer",
+            "o_order_date": "date",
+            "o_ordered_at": "timestamp",
+            "o_order_dt": "date",
+        }
+    }
+    log = _wild_log(
+        "psycopg.errors.UndefinedColumn", 'column "o_orderdate" does not exist', "fact_orders.py"
+    )
     fixture = {
-        "id": fid, "source": "chaos",
+        "id": fid,
+        "source": "chaos",
         "inputs": {
-            "log_path": "log.txt", "repo_path": "repo",
-            "schema_before": "schema_before.json", "schema_after": "schema_after.json",
-            "dag_id": "fact_orders_dag", "task_id": "fact_orders",
+            "log_path": "log.txt",
+            "repo_path": "repo",
+            "schema_before": "schema_before.json",
+            "schema_after": "schema_after.json",
+            "dag_id": "fact_orders_dag",
+            "task_id": "fact_orders",
             "run_id": f"scheduled__seed={seed}",
             "exception_type": "psycopg.errors.UndefinedColumn",
             "exception_message": 'column "o_orderdate" does not exist',
@@ -297,12 +377,267 @@ def wild_similar_columns(out_dir: Path, seed: int = 0) -> Fixture:
                 "files_changed": ["models/fact_orders.sql"],
                 "must_include_strings": ["o_orderdate", "o_order_date"],
             },
-            "severity": "P2", "auto_fixable": True,
+            "severity": "P2",
+            "auto_fixable": True,
         },
         "provenance": {"chaos_seed": seed, "injected_by": "wild_similar_columns"},
-        "license": "MIT", "wild": True,
+        "license": "MIT",
+        "wild": True,
     }
     _write_fixture(out_dir, fixture, log, schema_before, schema_after)
+    return Fixture(id=fid)
+
+
+def wild_xcom_serialization(out_dir: Path, seed: int = 0) -> Fixture:
+    """XCom value is not JSON-serializable, raising a TypeError during task push."""
+    fid = "wild_xcom_serialization"
+    files = {
+        "dags/xcom_push_dag.py": (
+            "from airflow import DAG\n"
+            "from airflow.operators.python import PythonOperator\n"
+            "from datetime import datetime\n"
+            "def push_data():\n"
+            "    # BUG: Returning datetime object which is not JSON-serializable by default XCom\n"
+            "    return {'updated_at': datetime.utcnow()}\n"
+            "with DAG('xcom_push_dag', start_date=datetime(2026, 1, 1)) as dag:\n"
+            "    task = PythonOperator(task_id='push_task', python_callable=push_data)\n"
+        ),
+    }
+    repo_path = out_dir / "repo"
+    _init_repo(repo_path, files)
+    log = _wild_log(
+        "TypeError", "Object of type datetime is not JSON serializable", "xcom_push_dag.py"
+    )
+    fixture = {
+        "id": fid,
+        "source": "chaos",
+        "inputs": {
+            "log_path": "log.txt",
+            "repo_path": "repo",
+            "schema_before": {},
+            "schema_after": {},
+            "dag_id": "xcom_push_dag",
+            "task_id": "push_task",
+            "run_id": f"scheduled__seed={seed}",
+            "exception_type": "TypeError",
+            "exception_message": "Object of type datetime is not JSON serializable",
+        },
+        "ground_truth": {
+            "failure_class": "dag_import",
+            "root_cause_summary": "XCom returned object is not JSON serializable (datetime object returned)",
+            "fix": {
+                "kind": "code_patch",
+                "files_changed": ["dags/xcom_push_dag.py"],
+                "must_include_strings": ["isoformat", "str"],
+            },
+            "severity": "P3",
+            "auto_fixable": True,
+        },
+        "provenance": {"chaos_seed": seed, "injected_by": "wild_xcom_serialization"},
+        "license": "MIT",
+        "wild": True,
+    }
+    _write_fixture(out_dir, fixture, log, {}, {})
+    return Fixture(id=fid)
+
+
+def wild_sensor_poke_timeout(out_dir: Path, seed: int = 0) -> Fixture:
+    """Custom sensor times out waiting for remote partition."""
+    fid = "wild_sensor_poke_timeout"
+    files = {
+        "dags/sensor_dag.py": (
+            "from airflow import DAG\n"
+            "from airflow.sensors.base import BaseSensorOperator\n"
+            "from datetime import datetime\n"
+            "class RemotePartitionSensor(BaseSensorOperator):\n"
+            "    def poke(self, context):\n"
+            "        return False  # Always times out\n"
+            "with DAG('sensor_dag', start_date=datetime(2026, 1, 1)) as dag:\n"
+            "    sensor = RemotePartitionSensor(task_id='wait_task', timeout=5)\n"
+        ),
+    }
+    repo_path = out_dir / "repo"
+    _init_repo(repo_path, files)
+    log = _wild_log(
+        "airflow.exceptions.AirflowSensorTimeout", "Sensor suite timed out", "sensor_dag.py"
+    )
+    fixture = {
+        "id": fid,
+        "source": "chaos",
+        "inputs": {
+            "log_path": "log.txt",
+            "repo_path": "repo",
+            "schema_before": {},
+            "schema_after": {},
+            "dag_id": "sensor_dag",
+            "task_id": "wait_task",
+            "run_id": f"scheduled__seed={seed}",
+            "exception_type": "airflow.exceptions.AirflowSensorTimeout",
+            "exception_message": "Sensor suite timed out",
+        },
+        "ground_truth": {
+            "failure_class": "late_partition",
+            "root_cause_summary": "Remote partition sensor timed out waiting for data",
+            "fix": {
+                "kind": "retry",
+            },
+            "severity": "P2",
+            "auto_fixable": True,
+        },
+        "provenance": {"chaos_seed": seed, "injected_by": "wild_sensor_poke_timeout"},
+        "license": "MIT",
+        "wild": True,
+    }
+    _write_fixture(out_dir, fixture, log, {}, {})
+    return Fixture(id=fid)
+
+
+def wild_duplicate_task_id(out_dir: Path, seed: int = 0) -> Fixture:
+    """Helper generator creates two tasks with the same task_id, raising DuplicateTaskIdFound."""
+    fid = "wild_duplicate_task_id"
+    files = {
+        "dags/duplicate_task_dag.py": (
+            "from airflow import DAG\n"
+            "from airflow.operators.empty import EmptyOperator\n"
+            "from datetime import datetime\n"
+            "with DAG('duplicate_task_dag', start_date=datetime(2026, 1, 1)) as dag:\n"
+            "    t1 = EmptyOperator(task_id='task_a')\n"
+            "    t2 = EmptyOperator(task_id='task_a')  # BUG: Duplicate task_id\n"
+        ),
+    }
+    repo_path = out_dir / "repo"
+    _init_repo(repo_path, files)
+    log = _wild_log(
+        "airflow.exceptions.DuplicateTaskIdFound",
+        "Task id 'task_a' has already been added to DAG",
+        "duplicate_task_dag.py",
+    )
+    fixture = {
+        "id": fid,
+        "source": "chaos",
+        "inputs": {
+            "log_path": "log.txt",
+            "repo_path": "repo",
+            "schema_before": {},
+            "schema_after": {},
+            "dag_id": "duplicate_task_dag",
+            "task_id": "task_a",
+            "run_id": f"scheduled__seed={seed}",
+            "exception_type": "airflow.exceptions.DuplicateTaskIdFound",
+            "exception_message": "Task id 'task_a' has already been added to DAG",
+        },
+        "ground_truth": {
+            "failure_class": "dag_import",
+            "root_cause_summary": "Duplicate task_id 'task_a' defined in the DAG",
+            "fix": {
+                "kind": "code_patch",
+                "files_changed": ["dags/duplicate_task_dag.py"],
+                "must_include_strings": ["task_b"],
+            },
+            "severity": "P2",
+            "auto_fixable": True,
+        },
+        "provenance": {"chaos_seed": seed, "injected_by": "wild_duplicate_task_id"},
+        "license": "MIT",
+        "wild": True,
+    }
+    _write_fixture(out_dir, fixture, log, {}, {})
+    return Fixture(id=fid)
+
+
+def wild_db_connection_pool_starved(out_dir: Path, seed: int = 0) -> Fixture:
+    """Postgres connection pool exhausted, raising OperationalError."""
+    fid = "wild_db_connection_pool_starved"
+    files = {
+        "dags/dw_dag.py": (
+            "from airflow import DAG\n"
+            "from airflow.providers.postgres.operators.postgres import PostgresOperator\n"
+            "from datetime import datetime\n"
+            "with DAG('dw_dag', start_date=datetime(2026, 1, 1)) as dag:\n"
+            "    load = PostgresOperator(task_id='load_task', postgres_conn_id='dw_db', sql='select 1')\n"
+        ),
+    }
+    repo_path = out_dir / "repo"
+    _init_repo(repo_path, files)
+    log = _wild_log(
+        "sqlalchemy.exc.OperationalError",
+        "remaining connection slots are reserved for non-replication superuser connections",
+        "dw_dag.py",
+    )
+    fixture = {
+        "id": fid,
+        "source": "chaos",
+        "inputs": {
+            "log_path": "log.txt",
+            "repo_path": "repo",
+            "schema_before": {},
+            "schema_after": {},
+            "dag_id": "dw_dag",
+            "task_id": "load_task",
+            "run_id": f"scheduled__seed={seed}",
+            "exception_type": "sqlalchemy.exc.OperationalError",
+            "exception_message": "remaining connection slots are reserved for non-replication superuser connections",
+        },
+        "ground_truth": {
+            "failure_class": "upstream_5xx",
+            "root_cause_summary": "Database connection pool starved of connection slots",
+            "fix": {
+                "kind": "retry",
+            },
+            "severity": "P1",
+            "auto_fixable": True,
+        },
+        "provenance": {"chaos_seed": seed, "injected_by": "wild_db_connection_pool_starved"},
+        "license": "MIT",
+        "wild": True,
+    }
+    _write_fixture(out_dir, fixture, log, {}, {})
+    return Fixture(id=fid)
+
+
+def wild_subdag_zombie(out_dir: Path, seed: int = 0) -> Fixture:
+    """Scheduler kills a zombie task, raising AirflowException due to SIGTERM."""
+    fid = "wild_subdag_zombie"
+    files = {
+        "dags/zombie_dag.py": (
+            "from airflow import DAG\n"
+            "from airflow.operators.python import PythonOperator\n"
+            "from datetime import datetime\n"
+            "with DAG('zombie_dag', start_date=datetime(2026, 1, 1)) as dag:\n"
+            "    task = PythonOperator(task_id='zombie_task', python_callable=lambda: 1)\n"
+        ),
+    }
+    repo_path = out_dir / "repo"
+    _init_repo(repo_path, files)
+    log = _wild_log("airflow.exceptions.AirflowException", "Task received SIGTERM", "zombie_dag.py")
+    fixture = {
+        "id": fid,
+        "source": "chaos",
+        "inputs": {
+            "log_path": "log.txt",
+            "repo_path": "repo",
+            "schema_before": {},
+            "schema_after": {},
+            "dag_id": "zombie_dag",
+            "task_id": "zombie_task",
+            "run_id": f"scheduled__seed={seed}",
+            "exception_type": "airflow.exceptions.AirflowException",
+            "exception_message": "Task received SIGTERM",
+        },
+        "ground_truth": {
+            "failure_class": "upstream_5xx",
+            "root_cause_summary": "Scheduler detected task as a zombie and killed it with SIGTERM",
+            "fix": {
+                "kind": "retry",
+            },
+            "severity": "P1",
+            "auto_fixable": True,
+        },
+        "provenance": {"chaos_seed": seed, "injected_by": "wild_subdag_zombie"},
+        "license": "MIT",
+        "wild": True,
+    }
+    _write_fixture(out_dir, fixture, log, {}, {})
     return Fixture(id=fid)
 
 
@@ -312,6 +647,11 @@ WILD_INJECTORS: dict[str, Callable[[Path, int], Fixture]] = {
     "wild_jinja_heavy": wild_jinja_heavy,
     "wild_cte_chain": wild_cte_chain,
     "wild_similar_columns": wild_similar_columns,
+    "wild_xcom_serialization": wild_xcom_serialization,
+    "wild_sensor_poke_timeout": wild_sensor_poke_timeout,
+    "wild_duplicate_task_id": wild_duplicate_task_id,
+    "wild_db_connection_pool_starved": wild_db_connection_pool_starved,
+    "wild_subdag_zombie": wild_subdag_zombie,
 }
 
 

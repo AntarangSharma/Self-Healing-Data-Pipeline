@@ -4,6 +4,7 @@
 
 The local mode lets the demo run on a fresh machine without GitHub auth.
 """
+
 from __future__ import annotations
 
 import os
@@ -29,15 +30,23 @@ def _open_pr(
         return ToolResult(
             ok=True,
             summary=f"PR dry-run: would have opened {branch}",
-            data={"url": f"dryrun://{repo_path}#branch={branch}", "branch": branch, "sha": "dryrun"},
+            data={
+                "url": f"dryrun://{repo_path}#branch={branch}",
+                "branch": branch,
+                "sha": "dryrun",
+            },
         )
 
     def run(*args: str) -> str:
-        return subprocess.check_output(
-            ["git", "-C", repo_path, *args],
-            stderr=subprocess.STDOUT,
-            timeout=15,
-        ).decode(errors="replace").strip()
+        return (
+            subprocess.check_output(
+                ["git", "-C", repo_path, *args],
+                stderr=subprocess.STDOUT,
+                timeout=15,
+            )
+            .decode(errors="replace")
+            .strip()
+        )
 
     try:
         # ensure we are on main and clean
@@ -64,25 +73,34 @@ def _open_pr(
 
     pr_url: str | None = None
     from shdpa.middleware.secrets import get_secret
+
     gh_token = get_secret("GH_TOKEN")
     if gh_token:
         os.environ["GH_TOKEN"] = gh_token
 
     if strict_pr:
         if not gh_token:
-            return ToolResult(ok=False, summary="Missing GH_TOKEN in strict PR mode", error="missing_gh_token")
+            return ToolResult(
+                ok=False, summary="Missing GH_TOKEN in strict PR mode", error="missing_gh_token"
+            )
         if not shutil.which("gh"):
-            return ToolResult(ok=False, summary="Missing gh CLI in strict PR mode", error="missing_gh_cli")
+            return ToolResult(
+                ok=False, summary="Missing gh CLI in strict PR mode", error="missing_gh_cli"
+            )
 
     if shutil.which("gh") and gh_token:
         try:
             run("push", "-u", "origin", branch)
-            out = subprocess.check_output(
-                ["gh", "pr", "create", "--title", title, "--body", body, "--head", branch],
-                cwd=repo_path,
-                stderr=subprocess.STDOUT,
-                timeout=20,
-            ).decode(errors="replace").strip()
+            out = (
+                subprocess.check_output(
+                    ["gh", "pr", "create", "--title", title, "--body", body, "--head", branch],
+                    cwd=repo_path,
+                    stderr=subprocess.STDOUT,
+                    timeout=20,
+                )
+                .decode(errors="replace")
+                .strip()
+            )
             pr_url = out.splitlines()[-1] if out else None
         except Exception as e:  # noqa: BLE001
             if strict_pr:
@@ -91,7 +109,9 @@ def _open_pr(
 
     if not pr_url:
         if strict_pr:
-            return ToolResult(ok=False, summary="PR URL was not generated in strict PR mode", error="no_pr_url")
+            return ToolResult(
+                ok=False, summary="PR URL was not generated in strict PR mode", error="no_pr_url"
+            )
         pr_url = f"local://{repo_path}#branch={branch}&sha={sha[:8]}"
 
     return ToolResult(

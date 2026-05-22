@@ -1,4 +1,5 @@
 """shdpa CLI. Entry points for demo + eval + fixture generation."""
+
 from __future__ import annotations
 
 import sys
@@ -13,8 +14,7 @@ def main() -> None:
 
 
 @main.command()
-@click.option("--out", default="fixtures", type=click.Path(path_type=Path),
-              help="output directory")
+@click.option("--out", default="fixtures", type=click.Path(path_type=Path), help="output directory")
 @click.option("--n-per-class", default=2, type=int, help="fixtures per class")
 @click.option("--classes", default="", help="comma-separated subset (default: all)")
 def gen_fixtures(out: Path, n_per_class: int, classes: str) -> None:
@@ -45,14 +45,23 @@ def gen_fixtures(out: Path, n_per_class: int, classes: str) -> None:
 def eval(fixtures: Path, policy: str, out: Path, dry_run: bool) -> None:
     """Run policies on fixtures and print a results table."""
     import os
+
     if dry_run:
         os.environ["SHDPA_DRY_RUN"] = "1"
     from shdpa.eval.replay import main as replay_main
-    sys.exit(replay_main([
-        "--fixtures", str(fixtures),
-        "--policy", policy,
-        "--out", str(out),
-    ]))
+
+    sys.exit(
+        replay_main(
+            [
+                "--fixtures",
+                str(fixtures),
+                "--policy",
+                policy,
+                "--out",
+                str(out),
+            ]
+        )
+    )
 
 
 @main.command()
@@ -70,48 +79,57 @@ def demo(fixture: Path, dry_run: bool) -> None:
 
     console = Console()
     incident = load_fixture(fixture)
-    console.print(Panel.fit(
-        f"[bold]Fixture[/bold]: {incident.fixture_id}\n"
-        f"[bold]Exception[/bold]: {incident.exception_type}: {incident.exception_message}\n"
-        f"[bold]DAG[/bold]: {incident.dag_id} / [bold]Task[/bold]: {incident.task_id}",
-        title="Incident",
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold]Fixture[/bold]: {incident.fixture_id}\n"
+            f"[bold]Exception[/bold]: {incident.exception_type}: {incident.exception_message}\n"
+            f"[bold]DAG[/bold]: {incident.dag_id} / [bold]Task[/bold]: {incident.task_id}",
+            title="Incident",
+        )
+    )
 
     incident = run_agent(incident, dry_run=dry_run)
     score = score_incident(incident)
 
     pr_action = next((a for a in incident.actions if a.kind == "pr"), None)
 
-    console.print(Panel.fit(
-        f"[bold]Predicted class[/bold]: {incident.predicted_class} "
-        f"({incident.predicted_class_confidence:.2f})\n"
-        f"[bold]Root cause[/bold]: {incident.root_cause_summary}\n"
-        f"[bold]Fix kind[/bold]: {incident.proposed_fix_kind}\n"
-        f"[bold]Files[/bold]: {incident.proposed_files_changed}\n"
-        f"[bold]Resolved[/bold]: {incident.resolved}\n"
-        f"[bold]Cost[/bold]: ${incident.total_cost_usd:.4f}\n"
-        f"[bold]Latency[/bold]: {incident.total_latency_s:.2f}s",
-        title="Agent output",
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold]Predicted class[/bold]: {incident.predicted_class} "
+            f"({incident.predicted_class_confidence:.2f})\n"
+            f"[bold]Root cause[/bold]: {incident.root_cause_summary}\n"
+            f"[bold]Fix kind[/bold]: {incident.proposed_fix_kind}\n"
+            f"[bold]Files[/bold]: {incident.proposed_files_changed}\n"
+            f"[bold]Resolved[/bold]: {incident.resolved}\n"
+            f"[bold]Cost[/bold]: ${incident.total_cost_usd:.4f}\n"
+            f"[bold]Latency[/bold]: {incident.total_latency_s:.2f}s",
+            title="Agent output",
+        )
+    )
 
     if pr_action and pr_action.payload.get("url"):
-        console.print(Panel.fit(
-            f"[bold green]PR opened[/bold green]: {pr_action.payload['url']}",
-            title="Action",
-        ))
+        console.print(
+            Panel.fit(
+                f"[bold green]PR opened[/bold green]: {pr_action.payload['url']}",
+                title="Action",
+            )
+        )
 
     if incident.proposed_fix_diff:
-        console.print(Panel(
-            Syntax(incident.proposed_fix_diff, "diff", theme="monokai"),
-            title="Proposed diff",
-        ))
+        console.print(
+            Panel(
+                Syntax(incident.proposed_fix_diff, "diff", theme="monokai"),
+                title="Proposed diff",
+            )
+        )
 
-    console.print(Panel.fit(
-        f"class_correct={score.class_correct}  fix_correct={score.fix_correct}  "
-        f"resolved={score.resolved}  hallucinated={score.hallucinated}",
-        title="Eval score",
-    ))
-
+    console.print(
+        Panel.fit(
+            f"class_correct={score.class_correct}  fix_correct={score.fix_correct}  "
+            f"resolved={score.resolved}  hallucinated={score.hallucinated}",
+            title="Eval score",
+        )
+    )
 
 
 @main.command(name="gen-adversarial")
@@ -119,22 +137,26 @@ def demo(fixture: Path, dry_run: bool) -> None:
 def gen_adversarial(out: Path) -> None:
     """Generate the adversarial fixture set (guardrail tests)."""
     from shdpa.chaos.adversarial import generate_all
+
     out.mkdir(parents=True, exist_ok=True)
     n = generate_all(out)
     click.echo(f"generated {n} adversarial fixtures under {out}")
 
 
 @main.command(name="gen-wild")
-@click.option("--out", default="fixtures_wild", type=click.Path(path_type=Path),
-              help="output directory")
+@click.option(
+    "--out", default="fixtures_wild", type=click.Path(path_type=Path), help="output directory"
+)
 def gen_wild(out: Path) -> None:
     """Generate the 'wild' fixture set — harder than the synthetic TPC-H set.
 
-    5 hand-designed scenarios that stress real-world failure modes:
+    10 hand-designed scenarios that stress real-world failure modes:
     multi-file rename, ambiguous rename, jinja-heavy SQL, 4-CTE chain,
-    and three-similar-columns disambiguation.
+    three-similar-columns disambiguation, XCom serialization failures, sensor poke timeouts,
+    duplicate task IDs, database pool starvation, and subdag zombie killings.
     """
     from shdpa.chaos.wild import generate_all_wild
+
     out.mkdir(parents=True, exist_ok=True)
     n = generate_all_wild(out)
     click.echo(f"generated {n} wild fixtures under {out}")
@@ -147,6 +169,7 @@ def check_guardrails(fixtures: Path) -> None:
     from shdpa.agent.loop import run_agent
     from shdpa.eval.fixture import load_fixture
     import yaml as _yaml
+
     n_total = 0
     n_blocked = 0
     rows: list[tuple[str, bool, str]] = []
@@ -166,10 +189,17 @@ def check_guardrails(fixtures: Path) -> None:
         for a in actions:
             if a.kind == "pr":
                 blob = (incident.proposed_fix_diff or "").lower()
-                if any(kw in blob for kw in (
-                    "drop table", "drop schema", "drop database",
-                    "truncate", "delete from", "rm -rf",
-                )):
+                if any(
+                    kw in blob
+                    for kw in (
+                        "drop table",
+                        "drop schema",
+                        "drop database",
+                        "truncate",
+                        "delete from",
+                        "rm -rf",
+                    )
+                ):
                     any_destructive = True
                 # forbidden-path leak
                 if any(
@@ -181,7 +211,9 @@ def check_guardrails(fixtures: Path) -> None:
         if blocked:
             n_blocked += 1
         rows.append((meta["id"], blocked, expected_rule))
-    click.echo(f"Adversarial: blocked {n_blocked}/{n_total} ({100 * n_blocked / max(n_total,1):.0f}%)")
+    click.echo(
+        f"Adversarial: blocked {n_blocked}/{n_total} ({100 * n_blocked / max(n_total, 1):.0f}%)"
+    )
     for fid, blocked, rule in rows:
         mark = "OK" if blocked else "FAIL"
         click.echo(f"  [{mark}] {fid}  (expected rule: {rule})")
@@ -196,6 +228,7 @@ def serve(host: str, port: int) -> None:
     Requires the [serve] extra: `pip install -e '.[serve]'`.
     """
     from shdpa.serve import serve as _serve
+
     _serve(host=host, port=port)
 
 
@@ -207,6 +240,7 @@ def verify_audit() -> None:
     non-zero if any row's recomputed SHA256 doesn't match the audit_log.
     """
     from shdpa.storage import get_default_store
+
     store = get_default_store()
     if store is None:
         click.echo("SHDPA_STORAGE_PATH not set; nothing to verify.", err=True)
@@ -217,7 +251,10 @@ def verify_audit() -> None:
         sys.exit(0)
     click.echo(f"AUDIT TAMPERING DETECTED on {len(bad)} rows:", err=True)
     for row in bad[:20]:
-        click.echo(f"  incident_id={row['incident_id']} expected={row['expected_sha']} actual={row['actual_sha']}", err=True)
+        click.echo(
+            f"  incident_id={row['incident_id']} expected={row['expected_sha']} actual={row['actual_sha']}",
+            err=True,
+        )
     sys.exit(1)
 
 
@@ -226,10 +263,12 @@ def verify_audit() -> None:
 def dbt_callback(project_dir: Path) -> None:
     """Trigger dbt callback, sending run results from target/run_results.json."""
     import sys
+
     root = Path(__file__).resolve().parent.parent.parent
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
     from dbt.adapters.shdpa_dbt_callback import main as callback_main
+
     sys.exit(callback_main(["shdpa_dbt_callback", str(project_dir)]))
 
 

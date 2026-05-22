@@ -1,4 +1,5 @@
 """B0: restart-only. Never diagnoses; proposes 'retry' for everything."""
+
 from __future__ import annotations
 
 import time
@@ -15,8 +16,7 @@ def run(incident: Incident) -> Incident:
     incident.proposed_files_changed = []
     incident.actions.append(Action(kind="retry", payload={"policy": "B0"}, dry_run=False))
     incident.resolved = (
-        incident.ground_truth is not None
-        and incident.ground_truth.fix.kind == "retry"
+        incident.ground_truth is not None and incident.ground_truth.fix.kind == "retry"
     )
     incident.resolution_kind = "auto" if incident.resolved else "unresolved"
     incident.total_cost_usd = 0.0

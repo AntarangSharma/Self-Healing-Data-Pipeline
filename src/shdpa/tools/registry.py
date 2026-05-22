@@ -3,6 +3,7 @@
 The agent only sees tools registered here. Calls are wrapped to record
 latency, errors, and a short result summary in the Incident.
 """
+
 from __future__ import annotations
 
 import time

@@ -1,4 +1,5 @@
 """Tests for the PII / secret redaction middleware."""
+
 from __future__ import annotations
 
 import pytest
@@ -6,17 +7,20 @@ import pytest
 from shdpa.middleware.redact import redact, redact_incident_in_place
 
 
-@pytest.mark.parametrize("dirty,label", [
-    ("aws key AKIAABCDEFGHIJKLMNOP rest", "aws_access_key"),
-    ("Authorization: Bearer abcdef1234567890ABCDEF==", "bearer_token"),
-    ("token sk-ant-api03-xxxxxxxxxxxxxxxxxxxxxxxx end", "anthropic_key"),
-    ("openai key sk-proj-AABBCCDDEEFFGGHHIIJJ rest", "openai_key"),
-    ("gh token ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA end", "github_token"),
-    ("jwt eyJhbGciOiJI.eyJzdWIiOiJ1MjMifQ.aBcDef123 end", "jwt"),
-    ("conn postgres://alice:hunter2@db.internal:5432/prod end", "db_url_with_password"),
-    ("email contact me at alice@example.com please", "email"),
-    ("ip 10.0.0.5 is down", "ipv4"),
-])
+@pytest.mark.parametrize(
+    "dirty,label",
+    [
+        ("aws key AKIAABCDEFGHIJKLMNOP rest", "aws_access_key"),
+        ("Authorization: Bearer abcdef1234567890ABCDEF==", "bearer_token"),
+        ("token sk-ant-api03-xxxxxxxxxxxxxxxxxxxxxxxx end", "anthropic_key"),
+        ("openai key sk-proj-AABBCCDDEEFFGGHHIIJJ rest", "openai_key"),
+        ("gh token ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA end", "github_token"),
+        ("jwt eyJhbGciOiJI.eyJzdWIiOiJ1MjMifQ.aBcDef123 end", "jwt"),
+        ("conn postgres://alice:hunter2@db.internal:5432/prod end", "db_url_with_password"),
+        ("email contact me at alice@example.com please", "email"),
+        ("ip 10.0.0.5 is down", "ipv4"),
+    ],
+)
 def test_pattern_detected(dirty: str, label: str) -> None:
     rep = redact(dirty)
     assert f"<REDACTED:{label}>" in rep.text, (

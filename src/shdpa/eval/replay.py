@@ -4,6 +4,7 @@ Usage:
   python -m shdpa.eval.replay --fixtures fixtures --policy ours
   python -m shdpa.eval.replay --fixtures fixtures --policy b0,b1,b2,ours --out results.jsonl
 """
+
 from __future__ import annotations
 
 import argparse
@@ -101,17 +102,18 @@ def render_per_class(results: dict[str, list[IncidentScore]]) -> None:
     t.add_column("Resolution", justify="right")
     t.add_column("Class Acc", justify="right")
     for cls, row in sorted(a.per_class.items()):
-        t.add_row(cls, str(int(row["n"])),
-                  f"{row['resolution_rate']:.2%}",
-                  f"{row['class_accuracy']:.2%}")
+        t.add_row(
+            cls, str(int(row["n"])), f"{row['resolution_rate']:.2%}", f"{row['class_accuracy']:.2%}"
+        )
     console.print(t)
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--fixtures", type=Path, default=Path("fixtures"))
-    ap.add_argument("--policy", default="b0,b1,b2,ours",
-                    help="comma-separated subset of: b0,b1,b2,ours")
+    ap.add_argument(
+        "--policy", default="b0,b1,b2,ours", help="comma-separated subset of: b0,b1,b2,ours"
+    )
     ap.add_argument("--out", type=Path, default=Path("results.jsonl"))
     args = ap.parse_args(argv)
 

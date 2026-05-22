@@ -1,4 +1,5 @@
 """Log fetch tool. Reads from incident.log_text or a file path."""
+
 from __future__ import annotations
 
 from pathlib import Path

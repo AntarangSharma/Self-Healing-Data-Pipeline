@@ -11,6 +11,7 @@ Run locally:
   ANTHROPIC_API_KEY=sk-... pytest tests/test_real_llm_providers.py -v
   OPENAI_API_KEY=sk-...    pytest tests/test_real_llm_providers.py -v
 """
+
 from __future__ import annotations
 
 import os
@@ -29,6 +30,7 @@ from shdpa.middleware.cost_meter import CostMeter
 
 
 # --------- provider smoke tests (one LLM call each) ----------
+
 
 @pytest.mark.skipif(
     not os.getenv("ANTHROPIC_API_KEY"),
@@ -72,6 +74,7 @@ def test_openai_provider_returns_valid_json(monkeypatch: pytest.MonkeyPatch) -> 
 
 # --------- agent end-to-end on one fixture per provider ----------
 
+
 @pytest.mark.skipif(
     not os.getenv("ANTHROPIC_API_KEY"),
     reason="ANTHROPIC_API_KEY not set",
@@ -93,9 +96,7 @@ def test_anthropic_agent_resolves_schema_rename(monkeypatch: pytest.MonkeyPatch)
         meter = CostMeter(per_incident_cap=0.05, total_cap=0.10)
         incident = run_agent(incident, meter=meter)
         score = score_incident(incident)
-        assert score.class_correct, (
-            f"triage misclassified: predicted={incident.predicted_class}"
-        )
+        assert score.class_correct, f"triage misclassified: predicted={incident.predicted_class}"
         assert score.resolved or score.fix_correct, (
             f"agent did not produce a valid fix: actions={incident.actions}"
         )

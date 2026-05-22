@@ -7,6 +7,7 @@ We deliberately avoid LangGraph for v0. Migration trigger:
   - durable state between calls (resume after crash), OR
   - parallel tool branches.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -35,6 +36,7 @@ log = structlog.get_logger()
 
 def _build_registry() -> ToolRegistry:
     from shdpa.tools import git_diff, logs, pr, schema_diff, airflow_api
+
     reg = ToolRegistry()
     reg.register(logs.TOOL)
     reg.register(schema_diff.TOOL)
@@ -56,16 +58,22 @@ def _triage(incident: Incident, llm: LLMProvider, meter: CostMeter) -> None:
     data, resp = llm.complete_json(
         system=system,
         user="\n".join(user_parts),
-        schema_hint='Required keys: failure_class, confidence, rationale.',
+        schema_hint="Required keys: failure_class, confidence, rationale.",
         purpose="triage",
         max_tokens=256,
     )
     meter.record(resp)
-    incident.llm_calls.append(LLMCall(
-        model=resp.model, provider=resp.provider,
-        prompt_tokens=resp.prompt_tokens, completion_tokens=resp.completion_tokens,
-        cost_usd=resp.cost_usd, latency_ms=resp.latency_ms, purpose="triage",
-    ))
+    incident.llm_calls.append(
+        LLMCall(
+            model=resp.model,
+            provider=resp.provider,
+            prompt_tokens=resp.prompt_tokens,
+            completion_tokens=resp.completion_tokens,
+            cost_usd=resp.cost_usd,
+            latency_ms=resp.latency_ms,
+            purpose="triage",
+        )
+    )
     incident.predicted_class = data.get("failure_class", "unknown") or "unknown"
     incident.predicted_class_confidence = float(data.get("confidence", 0.0) or 0.0)
 
@@ -84,7 +92,8 @@ def _diagnose(
     schema_data = None
     if incident.schema_before or incident.schema_after:
         r = registry.call(
-            "diff_schema", incident,
+            "diff_schema",
+            incident,
             schema_before=incident.schema_before,
             schema_after=incident.schema_after,
         )
@@ -102,8 +111,8 @@ def _diagnose(
     if schema_data and schema_data.get("renames"):
         rn = schema_data["renames"][0]
         rename_hint = (
-            f'\nSchema diff inferred a likely rename: {rn["from"]} → {rn["to"]} '
-            f'in table {rn["table"]}. '
+            f"\nSchema diff inferred a likely rename: {rn['from']} → {rn['to']} "
+            f"in table {rn['table']}. "
             f'"missing_column": "{rn["from"]}", "suggested_column": "{rn["to"]}".'
         )
 
@@ -123,29 +132,40 @@ def _diagnose(
             + "  (your patches MUST produce a diff containing every one of these tokens)"
         )
 
-    user = "\n\n".join([
-        f"failure_class: {incident.predicted_class}",
-        f"triage_confidence: {incident.predicted_class_confidence:.2f}",
-        f"dag_id: {incident.dag_id}",
-        f"task_id: {incident.task_id}",
-        f"exception_type: {incident.exception_type or ''}",
-        f"exception_message: {incident.exception_message or ''}",
-        f"repo_files: {repo_files}",
-        "log (tail 60):\n" + "\n".join(incident.log_text.splitlines()[-60:]),
-        f"schema_diff_summary: {schema_summary}{rename_hint}",
-        f"git_diff (truncated):\n{diff_summary}" if diff_summary else "",
-        hint_block,
-    ])
+    user = "\n\n".join(
+        [
+            f"failure_class: {incident.predicted_class}",
+            f"triage_confidence: {incident.predicted_class_confidence:.2f}",
+            f"dag_id: {incident.dag_id}",
+            f"task_id: {incident.task_id}",
+            f"exception_type: {incident.exception_type or ''}",
+            f"exception_message: {incident.exception_message or ''}",
+            f"repo_files: {repo_files}",
+            "log (tail 60):\n" + "\n".join(incident.log_text.splitlines()[-60:]),
+            f"schema_diff_summary: {schema_summary}{rename_hint}",
+            f"git_diff (truncated):\n{diff_summary}" if diff_summary else "",
+            hint_block,
+        ]
+    )
     purpose = "diagnose" if attempt == 1 else f"diagnose_retry_{attempt}"
     data, resp = llm.complete_json(
-        system=system, user=user, purpose=purpose, max_tokens=600,
+        system=system,
+        user=user,
+        purpose=purpose,
+        max_tokens=600,
     )
     meter.record(resp)
-    incident.llm_calls.append(LLMCall(
-        model=resp.model, provider=resp.provider,
-        prompt_tokens=resp.prompt_tokens, completion_tokens=resp.completion_tokens,
-        cost_usd=resp.cost_usd, latency_ms=resp.latency_ms, purpose=purpose,
-    ))
+    incident.llm_calls.append(
+        LLMCall(
+            model=resp.model,
+            provider=resp.provider,
+            prompt_tokens=resp.prompt_tokens,
+            completion_tokens=resp.completion_tokens,
+            cost_usd=resp.cost_usd,
+            latency_ms=resp.latency_ms,
+            purpose=purpose,
+        )
+    )
     # update confidence if diagnose returned one
     if "confidence" in data:
         with contextlib.suppress(TypeError, ValueError):
@@ -334,6 +354,7 @@ def run_agent(
     dry_run: bool = False,
 ) -> Incident:
     import os
+
     t0 = time.time()
     if not dry_run:
         dry_run = os.getenv("SHDPA_DRY_RUN", "0").lower() in ("1", "true", "yes")
@@ -372,8 +393,7 @@ def run_agent(
             diagnosis = {
                 "fix_kind": "noop",
                 "root_cause": (
-                    "triage could not classify failure with confidence; "
-                    "escalating to human review."
+                    "triage could not classify failure with confidence; escalating to human review."
                 ),
             }
         else:
@@ -389,21 +409,18 @@ def run_agent(
         files, diff_text = _plan_files(incident, diagnosis)
         if diagnosis.get("fix_kind") == "code_patch":
             for attempt in range(2, max_attempts + 1):
-                required = [
-                    s for s in (diagnosis.get("must_include_strings") or [])
-                    if s
-                ]
+                required = [s for s in (diagnosis.get("must_include_strings") or []) if s]
                 if not required:
                     break
-                missing = [
-                    s for s in required
-                    if s.lower() not in diff_text.lower()
-                ]
+                missing = [s for s in required if s.lower() not in diff_text.lower()]
                 if not missing:
                     break
                 # Re-prompt with the missing tokens as a hard requirement.
                 diagnosis = _diagnose(
-                    incident, llm, meter, registry,
+                    incident,
+                    llm,
+                    meter,
+                    registry,
                     must_include_hint=missing,
                     attempt=attempt,
                 )
@@ -415,9 +432,14 @@ def run_agent(
 
         # Sandbox validation
         if files and incident.repo_path:
-            disable_sandbox = os.getenv("SHDPA_DISABLE_SANDBOX", "0").lower() in ("1", "true", "yes")
+            disable_sandbox = os.getenv("SHDPA_DISABLE_SANDBOX", "0").lower() in (
+                "1",
+                "true",
+                "yes",
+            )
             if not disable_sandbox:
                 from shdpa.middleware.sandbox import validate_patches
+
                 success, s_msg = validate_patches(incident.repo_path, files)
                 if not success:
                     raise GuardrailViolation("sandbox_validation_failed", s_msg)
@@ -444,8 +466,19 @@ def run_agent(
 
         # Closed-loop live Airflow verification
         live_verify = os.getenv("SHDPA_LIVE_AIRFLOW_VERIFY", "0").lower() in ("1", "true", "yes")
-        if live_verify and incident.resolved and incident.dag_id and incident.task_id and incident.run_id:
-            log.info("airflow_verify.start", dag_id=incident.dag_id, task_id=incident.task_id, run_id=incident.run_id)
+        if (
+            live_verify
+            and incident.resolved
+            and incident.dag_id
+            and incident.task_id
+            and incident.run_id
+        ):
+            log.info(
+                "airflow_verify.start",
+                dag_id=incident.dag_id,
+                task_id=incident.task_id,
+                run_id=incident.run_id,
+            )
             # Clear task to trigger retry
             clear_res = registry.call(
                 "clear_airflow_task",
@@ -474,7 +507,7 @@ def run_agent(
                     )
                     if status_res.ok and status_res.data:
                         state = status_res.data.get("state")
-                        log.info("airflow_verify.poll", attempt=poll_idx+1, state=state)
+                        log.info("airflow_verify.poll", attempt=poll_idx + 1, state=state)
                         if state == "success":
                             poll_success = True
                             break
@@ -487,19 +520,29 @@ def run_agent(
                     # Rollback git branch in the repository if verification failed
                     if incident.repo_path and Path(incident.repo_path).exists():
                         import subprocess
+
                         try:
-                            subprocess.run(["git", "-C", incident.repo_path, "checkout", "main"], check=False)
+                            subprocess.run(
+                                ["git", "-C", incident.repo_path, "checkout", "main"], check=False
+                            )
                             branch_name = action.payload.get("branch")
                             if branch_name:
-                                subprocess.run(["git", "-C", incident.repo_path, "branch", "-D", branch_name], check=False)
+                                subprocess.run(
+                                    ["git", "-C", incident.repo_path, "branch", "-D", branch_name],
+                                    check=False,
+                                )
                         except Exception:  # noqa: BLE001
                             pass
 
         incident.resolution_kind = (
-            "auto" if (incident.resolved
-                       and incident.predicted_class in AUTO_FIX_WHITELIST
-                       and incident.predicted_class_confidence >= 0.85)
-            else "pr" if incident.resolved
+            "auto"
+            if (
+                incident.resolved
+                and incident.predicted_class in AUTO_FIX_WHITELIST
+                and incident.predicted_class_confidence >= 0.85
+            )
+            else "pr"
+            if incident.resolved
             else "unresolved"
         )
     except CostBudgetExceeded as e:
@@ -511,12 +554,14 @@ def run_agent(
         incident.error = f"guardrail: {gv}"
         incident.resolved = False
         incident.resolution_kind = "unresolved"
-        incident.actions.append(Action(
-            kind="noop",
-            payload={"reason": str(gv), "rule": gv.rule},
-            blocked_by_guardrail=gv.rule,
-            dry_run=True,
-        ))
+        incident.actions.append(
+            Action(
+                kind="noop",
+                payload={"reason": str(gv), "rule": gv.rule},
+                blocked_by_guardrail=gv.rule,
+                dry_run=True,
+            )
+        )
     except Exception as e:  # noqa: BLE001
         incident.error = f"agent_error: {e!r}"
         incident.resolved = False

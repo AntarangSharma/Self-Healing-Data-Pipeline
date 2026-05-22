@@ -33,7 +33,7 @@ def test_openai_model_routing():
             model="gpt-4o-mini",
             messages=[{"role": "system", "content": "sys"}, {"role": "user", "content": "usr"}],
             max_tokens=1024,
-            temperature=0.1
+            temperature=0.1,
         )
 
         # Test diagnose purpose
@@ -43,7 +43,7 @@ def test_openai_model_routing():
             model="gpt-4o",
             messages=[{"role": "system", "content": "sys"}, {"role": "user", "content": "usr"}],
             max_tokens=1024,
-            temperature=0.1
+            temperature=0.1,
         )
 
 
@@ -69,7 +69,7 @@ def test_anthropic_model_routing():
             system="sys",
             messages=[{"role": "user", "content": "usr"}],
             max_tokens=1024,
-            temperature=0.1
+            temperature=0.1,
         )
 
         # Test diagnose purpose
@@ -80,5 +80,5 @@ def test_anthropic_model_routing():
             system="sys",
             messages=[{"role": "user", "content": "usr"}],
             max_tokens=1024,
-            temperature=0.1
+            temperature=0.1,
         )

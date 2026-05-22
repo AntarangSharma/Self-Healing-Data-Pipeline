@@ -1,4 +1,5 @@
 """End-to-end smoke test: chaos → fixture → agent → score, all on mock LLM."""
+
 import shutil
 import tempfile
 from pathlib import Path
@@ -11,17 +12,20 @@ from shdpa.eval.fixture import load_fixture
 from shdpa.eval.metrics import score_incident
 
 
-@pytest.mark.parametrize("kind", [
-    "schema_rename_column",
-    "upstream_5xx",
-    "auth_expiry",
-    "disk_full",
-    "dep_conflict",
-    "idempotency",
-    "null_spike",
-    "oom",
-    "dag_import",
-])
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "schema_rename_column",
+        "upstream_5xx",
+        "auth_expiry",
+        "disk_full",
+        "dep_conflict",
+        "idempotency",
+        "null_spike",
+        "oom",
+        "dag_import",
+    ],
+)
 def test_mock_agent_resolves(kind: str):
     tmp = Path(tempfile.mkdtemp())
     try:

@@ -2,6 +2,7 @@
 
 This is the canonical schema. Every persisted record uses these types.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone

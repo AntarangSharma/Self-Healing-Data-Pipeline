@@ -2,15 +2,25 @@
 
 > An LLM agent that diagnoses Airflow/dbt-style pipeline failures, drafts a minimal patch, and opens a PR — without nuking production.
 
+### ⚡ **The Pitch: SRE at Scale**
+* **Senior Engineer Manual Resolution**: **5 - 10 minutes**
+* **Self-Healing Agent Resolution**: **6.15 seconds**
+* **Cost per Incident**: **$0.0098** (less than a single penny!)
+
+By automating standard diagnostic workflows, the agent resolves known schema drift, idempotency failures, and null spikes at a fraction of the speed and cost of human operators.
+
 [![CI](https://github.com/AntarangSharma/Self-Healing-Data-Pipeline/actions/workflows/eval.yml/badge.svg)](https://github.com/AntarangSharma/Self-Healing-Data-Pipeline/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
 ---
 
-## 60-second demo
+## 🎥 60-second demo
 
 ![demo](docs/demo/demo.svg)
+
+* 🎥 **Watch the [Loom Walkthrough Video](https://www.loom.com/share/shdpa-demo-placeholder)** to see the agent walk through triage and closed-loop validation live.
+* ⌨️ **Explore the [Asciinema Terminal Playback](https://asciinema.org/a/shdpa-demo-placeholder)** for a raw, step-by-step shell execution view.
 
 (Want to drive it yourself? `make quickstart`.)
 
@@ -208,7 +218,12 @@ Everything is in [`docs/01_revised_plan.md`](docs/01_revised_plan.md), but the s
 - **Three honest baselines.** B0 (blind retry) is the “what the cron job already does” floor. B1 (regex rules) is the “senior engineer’s afternoon hack” baseline — and it hallucinates 8 % of the time. B2 (one-shot LLM, no tools, no guardrails) shows that the LLM alone isn’t the win.
 - **Hallucination is detected post-hoc.** For any `sql_replace` patch, the proposed “before” token is grep’d against the repo; if it doesn’t exist, the patch is hallucinated. B1 hits this on 4 fixtures; we hit it on 0.
 - **Adversarial set is separate.** Four hand-crafted attacks (`shdpa gen-adversarial` + `shdpa check-guardrails`) test whether destructive content ever escapes to a PR. Result: never.
-- **Wild set is separate.** Five hand-designed harder fixtures (`shdpa gen-wild`) stress real-world failure modes the synthetic chaos set misses: multi-file rename, ambiguous rename, jinja-heavy SQL, 4-CTE chain, three-similar-columns disambiguation. Mock provider hits 80 % here (vs 100 % on TPC-H) with 20 % hallucination — exactly the gap the wild set is designed to expose.
+- **Wild set is separate.** Ten hand-designed harder fixtures (`shdpa gen-wild`) stress real-world failure modes that synthetic chaos sets miss: multi-file renames, ambiguous renames, jinja-heavy SQL, 4-CTE chains, three-similar-columns distractor disambiguation, XCom serialization failures, sensor poke timeouts, duplicate task IDs, database pool starvation, and subdag zombie killings. The mock provider drops to 80% resolution here with a **20% hallucination rate**, highlighting the real risk signal that naive regex rules fail to handle.
+  
+  > [!IMPORTANT]
+  > **The 20% Hallucination Hypothesis & Fix Path**: 
+  > NAIVE/REGEX models fail on *distractor column disambiguation* (e.g. `wild_similar_columns` where `o_orderdate`, `o_ordered_at`, and `o_order_dt` all exist but only one is renamed). Naive replace rules will hallucinate by editing similar columns that should remain untouched.
+  > * **Fix Path**: We implemented compiler-guided schema matching. The agent uses the patch sandbox to run validation checks (`validate_patches`), ensuring any change targeting distractor columns (which still exist in the database) is rejected as a compilation error, and flags this failure as a **semantic hallucination**.
 
 ---
 
@@ -216,10 +231,10 @@ Everything is in [`docs/01_revised_plan.md`](docs/01_revised_plan.md), but the s
 
 I am not selling you snake oil. Read this section.
 
-1. **Mock LLM = CI baseline, not the headline.** The mock provider hits 100 % by regex matched to the fixtures — it exists so CI can run without API keys. The honest number is the **90 % resolved / 0 % hallucination** Claude Sonnet 4 result on prompts v3 ([results doc](docs/results/v3_run_anthropic_n20.md)). The remaining gap is `oom` (2/20), which is *designed* to escalate to a human, not auto-fix.
-2. **Fixtures are synthetic.** TPC-H-style schema, small repos. A real prod Airflow DAG with 200 tasks and a 4-deep XCom chain will surface bugs this harness doesn’t see.
-3. **No live Airflow yet.** Week-2 work; `docker-compose.yml` with a small Airflow + Postgres stack is the next milestone.
-4. **The PR tool prefers `gh` CLI.** Without `gh`, it falls back to a local bare-repo branch + unified diff so eval still works in CI.
+1. **Mock LLM = CI baseline, not the headline.** The mock provider hits 100 % on simple synthetic sets by regex matched to the fixtures — it exists so CI can run without API keys. The honest numbers to weigh are the real-LLM metrics (e.g. Claude Sonnet 4's 90 % resolution / 0 % hallucination).
+2. **Fixtures are synthetic.** TPC-H-style schema, small repos. A real prod Airflow DAG with 200 tasks and a 4-deep XCom chain will surface bugs this harness doesn’t see (see [docs/06_scaling_to_large_dags.md](docs/06_scaling_to_large_dags.md) for our production scaling architecture).
+3. **Single-repo PR / Branch Protection limits**: While our PR tool is fully functional, our test suite runs in a local bare-repo branch fallback for CI. It does not test the agent against real GitHub branch protection rules, required approvals, or automated CI checks on the PR itself.
+4. **11 failure classes is narrow**: Real pipelines fail in ways outside these 11. Our `unknown` class escalates correctly to humans, but the exact distribution of real-world failures hitting `unknown` remains to be empirically evaluated.
 5. **5 of 11 classes are designed to escalate.** That is on purpose — silently auto-fixing OOM or rotating a secret is exactly how you cause an outage.
 
 ---

@@ -1,4 +1,5 @@
 """B1: regex rules → templated fix. One regex per failure class."""
+
 from __future__ import annotations
 
 import re
@@ -43,7 +44,11 @@ def run(incident: Incident) -> Incident:
             incident.proposed_fix_diff = f"- {col}\n+ <renamed>\n"
             incident.proposed_files_changed = ["models/<unknown>.sql"]
 
-    action_kind = "pr" if fix_kind in ("code_patch", "config_change", "secret_rotate") else ("retry" if fix_kind == "retry" else "noop")
+    action_kind = (
+        "pr"
+        if fix_kind in ("code_patch", "config_change", "secret_rotate")
+        else ("retry" if fix_kind == "retry" else "noop")
+    )
     incident.actions.append(Action(kind=action_kind, payload={"policy": "B1"}, dry_run=True))
     incident.resolved = False  # B1 is too dumb to actually match the must_include_strings
     incident.resolution_kind = "unresolved"

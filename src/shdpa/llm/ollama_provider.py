@@ -1,4 +1,5 @@
 """Ollama provider. Local models. Requires Ollama running on OLLAMA_HOST."""
+
 from __future__ import annotations
 
 import json
@@ -22,8 +23,13 @@ class OllamaProvider:
         self.model = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 
     def complete(
-        self, system: str, user: str, *, max_tokens: int = 1024,
-        temperature: float = 0.1, purpose: str = "",
+        self,
+        system: str,
+        user: str,
+        *,
+        max_tokens: int = 1024,
+        temperature: float = 0.1,
+        purpose: str = "",
     ) -> LLMResponse:
         t0 = time.time()
         r = self.client.chat(
@@ -35,15 +41,24 @@ class OllamaProvider:
         pt = r.get("prompt_eval_count", 0)
         ct = r.get("eval_count", 0)
         return LLMResponse(
-            text=text, prompt_tokens=pt, completion_tokens=ct,
+            text=text,
+            prompt_tokens=pt,
+            completion_tokens=ct,
             cost_usd=0.0,  # local
             latency_ms=int((time.time() - t0) * 1000),
-            model=self.model, provider=self.name,
+            model=self.model,
+            provider=self.name,
         )
 
     def complete_json(
-        self, system: str, user: str, *, schema_hint: str = "",
-        max_tokens: int = 1024, temperature: float = 0.0, purpose: str = "",
+        self,
+        system: str,
+        user: str,
+        *,
+        schema_hint: str = "",
+        max_tokens: int = 1024,
+        temperature: float = 0.0,
+        purpose: str = "",
     ) -> tuple[dict[str, Any], LLMResponse]:
         sys2 = system + "\n\nReturn ONLY a JSON object. " + (schema_hint or "")
         t0 = time.time()
@@ -61,9 +76,12 @@ class OllamaProvider:
         pt = r.get("prompt_eval_count", 0)
         ct = r.get("eval_count", 0)
         resp = LLMResponse(
-            text=text, prompt_tokens=pt, completion_tokens=ct,
+            text=text,
+            prompt_tokens=pt,
+            completion_tokens=ct,
             cost_usd=0.0,
             latency_ms=int((time.time() - t0) * 1000),
-            model=self.model, provider=self.name,
+            model=self.model,
+            provider=self.name,
         )
         return data, resp

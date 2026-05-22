@@ -32,7 +32,7 @@ def test_clear_airflow_task_success(monkeypatch):
 
     monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
     from shdpa.tools.airflow_api import clear_airflow_task
-    
+
     r = clear_airflow_task("test_dag", "test_task", "test_run")
     assert r.ok
     assert "cleared" in r.summary
@@ -46,7 +46,7 @@ def test_get_airflow_task_status_success(monkeypatch):
 
     monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
     from shdpa.tools.airflow_api import get_airflow_task_status
-    
+
     r = get_airflow_task_status("test_dag", "test_task", "test_run")
     assert r.ok
     assert r.data["state"] == "success"
@@ -54,7 +54,7 @@ def test_get_airflow_task_status_success(monkeypatch):
 
 def test_agent_closed_loop_verify_success(monkeypatch):
     monkeypatch.setenv("SHDPA_LIVE_AIRFLOW_VERIFY", "1")
-    
+
     incident = Incident(
         dag_id="test_dag",
         task_id="test_task",
@@ -62,30 +62,37 @@ def test_agent_closed_loop_verify_success(monkeypatch):
         predicted_class="schema_drift",
         predicted_class_confidence=0.9,
     )
-    
+
     # Mock loop functions and registry calls to avoid external services
     # We bypass LLM completion by mock diagnosing
     monkeypatch.setattr("shdpa.agent.loop._triage", lambda inc, llm, meter: None)
-    
+
     def mock_diagnose(inc, llm, meter, registry, **kwargs):
         inc.predicted_class = "schema_drift"
         inc.predicted_class_confidence = 0.95
         return {
             "fix_kind": "code_patch",
             "root_cause": "column rename",
-            "sql_replace": {"find": "col_a", "replace": "col_b"}
+            "sql_replace": {"find": "col_a", "replace": "col_b"},
         }
+
     monkeypatch.setattr("shdpa.agent.loop._diagnose", mock_diagnose)
-    
+
     # Mock make_pr to succeed
     from shdpa.models import Action
-    monkeypatch.setattr("shdpa.agent.loop._make_pr", lambda *args, **kwargs: Action(kind="pr", payload={"branch": "shdpa/fix-test", "url": "mock-url"}))
-    
+
+    monkeypatch.setattr(
+        "shdpa.agent.loop._make_pr",
+        lambda *args, **kwargs: Action(
+            kind="pr", payload={"branch": "shdpa/fix-test", "url": "mock-url"}
+        ),
+    )
+
     # Mock registry tool calls
     original_call = ToolRegistry.call
     clear_called = False
     status_called_count = 0
-    
+
     def mock_tool_call(self, name, incident, **kwargs):
         nonlocal clear_called, status_called_count
         if name == "clear_airflow_task":
@@ -97,9 +104,9 @@ def test_agent_closed_loop_verify_success(monkeypatch):
             state = "running" if status_called_count == 1 else "success"
             return ToolResult(ok=True, summary=f"state: {state}", data={"state": state})
         return original_call(self, name, incident, **kwargs)
-        
+
     monkeypatch.setattr(ToolRegistry, "call", mock_tool_call)
-    
+
     # Run the agent
     out = run_agent(incident, dry_run=True)
     assert out.resolved
@@ -111,7 +118,7 @@ def test_agent_closed_loop_verify_success(monkeypatch):
 
 def test_agent_closed_loop_verify_failure(monkeypatch):
     monkeypatch.setenv("SHDPA_LIVE_AIRFLOW_VERIFY", "1")
-    
+
     incident = Incident(
         dag_id="test_dag",
         task_id="test_task",
@@ -119,25 +126,32 @@ def test_agent_closed_loop_verify_failure(monkeypatch):
         predicted_class="schema_drift",
         predicted_class_confidence=0.9,
     )
-    
+
     monkeypatch.setattr("shdpa.agent.loop._triage", lambda inc, llm, meter: None)
-    
+
     def mock_diagnose(inc, llm, meter, registry, **kwargs):
         inc.predicted_class = "schema_drift"
         inc.predicted_class_confidence = 0.95
         return {
             "fix_kind": "code_patch",
             "root_cause": "column rename",
-            "sql_replace": {"find": "col_a", "replace": "col_b"}
+            "sql_replace": {"find": "col_a", "replace": "col_b"},
         }
+
     monkeypatch.setattr("shdpa.agent.loop._diagnose", mock_diagnose)
-    
+
     from shdpa.models import Action
-    monkeypatch.setattr("shdpa.agent.loop._make_pr", lambda *args, **kwargs: Action(kind="pr", payload={"branch": "shdpa/fix-test", "url": "mock-url"}))
-    
+
+    monkeypatch.setattr(
+        "shdpa.agent.loop._make_pr",
+        lambda *args, **kwargs: Action(
+            kind="pr", payload={"branch": "shdpa/fix-test", "url": "mock-url"}
+        ),
+    )
+
     original_call = ToolRegistry.call
     clear_called = False
-    
+
     def mock_tool_call(self, name, incident, **kwargs):
         nonlocal clear_called
         if name == "clear_airflow_task":
@@ -147,9 +161,9 @@ def test_agent_closed_loop_verify_failure(monkeypatch):
             # Task repeatedly fails
             return ToolResult(ok=True, summary="state: failed", data={"state": "failed"})
         return original_call(self, name, incident, **kwargs)
-        
+
     monkeypatch.setattr(ToolRegistry, "call", mock_tool_call)
-    
+
     # Run the agent
     out = run_agent(incident, dry_run=True)
     assert not out.resolved

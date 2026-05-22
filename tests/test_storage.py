@@ -1,4 +1,5 @@
 """Tests for the SQLite incident store + audit-log integrity."""
+
 from __future__ import annotations
 
 import json
@@ -12,19 +13,29 @@ from shdpa.storage import SQLiteStore, get_default_store
 
 def _make_incident(**over) -> Incident:
     base = dict(
-        dag_id="dag_a", task_id="task_b",
+        dag_id="dag_a",
+        task_id="task_b",
         predicted_class="schema_drift",
         predicted_class_confidence=0.9,
-        resolved=True, resolution_kind="auto",
-        total_cost_usd=0.01, total_latency_s=1.5,
+        resolved=True,
+        resolution_kind="auto",
+        total_cost_usd=0.01,
+        total_latency_s=1.5,
         log_text="hello",
     )
     base.update(over)
     inc = Incident(**base)
-    inc.llm_calls.append(LLMCall(
-        model="m", provider="mock", prompt_tokens=10,
-        completion_tokens=5, cost_usd=0.005, latency_ms=12, purpose="triage",
-    ))
+    inc.llm_calls.append(
+        LLMCall(
+            model="m",
+            provider="mock",
+            prompt_tokens=10,
+            completion_tokens=5,
+            cost_usd=0.005,
+            latency_ms=12,
+            purpose="triage",
+        )
+    )
     inc.actions.append(Action(kind="pr", payload={"url": "http://x"}, dry_run=False))
     return inc
 
@@ -59,7 +70,7 @@ def test_aggregate(tmp_path: Path) -> None:
     agg = store.aggregate()
     assert agg["n"] == 3
     assert agg["resolved"] == 2
-    assert abs(agg["resolution_rate"] - 2/3) < 1e-9
+    assert abs(agg["resolution_rate"] - 2 / 3) < 1e-9
     assert abs(agg["total_cost_usd"] - 0.06) < 1e-9
 
 
@@ -90,11 +101,13 @@ def test_audit_detects_tampering(tmp_path: Path) -> None:
 
 
 def test_get_default_store_env_gated(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("SHDPA_STORAGE_PATH", raising=False)
     # reset module-level singleton
     import shdpa.storage.sqlite_store as ss
+
     ss._default_store = None
     assert get_default_store() is None
     monkeypatch.setenv("SHDPA_STORAGE_PATH", str(tmp_path / "live.db"))

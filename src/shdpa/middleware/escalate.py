@@ -12,6 +12,7 @@ Supported channels (set the env var to enable):
 If no env var is set, the call logs a structlog event with level=warning
 and returns False so callers can decide to fail loudly.
 """
+
 from __future__ import annotations
 
 import json
@@ -40,8 +41,9 @@ def _build_payload(incident: Incident, reason: str) -> dict[str, Any]:
         "log_tail": "\n".join(incident.log_text.splitlines()[-20:]),
         "reason_for_escalation": reason,
         "total_cost_usd": incident.total_cost_usd,
-        "actions": [{"kind": a.kind, "blocked_by": a.blocked_by_guardrail}
-                    for a in incident.actions],
+        "actions": [
+            {"kind": a.kind, "blocked_by": a.blocked_by_guardrail} for a in incident.actions
+        ],
     }
 
 
@@ -53,18 +55,23 @@ def _slack_body(payload: dict[str, Any]) -> dict[str, Any]:
             f"`{payload['dag_id']}.{payload['task_id']}`"
         ),
         "blocks": [
-            {"type": "section", "text": {"type": "mrkdwn", "text":
-                f":rotating_light: *shdpa escalation* — `{payload['predicted_class']}` "
-                f"(confidence {payload['confidence']:.2f})\n"
-                f"*DAG*: `{payload['dag_id']}` *Task*: `{payload['task_id']}`\n"
-                f"*Reason*: {payload['reason_for_escalation']}\n"
-                f"*Root cause*: {payload['root_cause'] or '(none)'}\n"
-                f"*Exception*: `{payload['exception_type']}`: "
-                f"{payload['exception_message'] or '(none)'}",
-            }},
-            {"type": "section", "text": {"type": "mrkdwn", "text":
-                "```\n" + payload["log_tail"][:1500] + "\n```"
-            }},
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f":rotating_light: *shdpa escalation* — `{payload['predicted_class']}` "
+                    f"(confidence {payload['confidence']:.2f})\n"
+                    f"*DAG*: `{payload['dag_id']}` *Task*: `{payload['task_id']}`\n"
+                    f"*Reason*: {payload['reason_for_escalation']}\n"
+                    f"*Root cause*: {payload['root_cause'] or '(none)'}\n"
+                    f"*Exception*: `{payload['exception_type']}`: "
+                    f"{payload['exception_message'] or '(none)'}",
+                },
+            },
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "```\n" + payload["log_tail"][:1500] + "\n```"},
+            },
         ],
     }
 
@@ -76,8 +83,7 @@ def _pagerduty_body(payload: dict[str, Any], routing_key: str) -> dict[str, Any]
         "dedup_key": payload["incident_id"],
         "payload": {
             "summary": (
-                f"shdpa: {payload['predicted_class']} on "
-                f"{payload['dag_id']}.{payload['task_id']}"
+                f"shdpa: {payload['predicted_class']} on {payload['dag_id']}.{payload['task_id']}"
             ),
             "severity": "warning",
             "source": "shdpa-agent",
@@ -126,14 +132,16 @@ def escalate(incident: Incident, *, reason: str) -> bool:
             return False
 
     from shdpa.middleware.secrets import get_secret
+
     slack_url = get_secret("SHDPA_SLACK_WEBHOOK_URL") or get_secret("SLACK_WEBHOOK_URL")
     if slack_url and _safe_post(slack_url, _slack_body(payload)):
         log.info("escalation.slack_ok", incident_id=payload["incident_id"])
         delivered = True
 
     pd_key = get_secret("SHDPA_PAGERDUTY_ROUTING_KEY") or get_secret("PAGERDUTY_ROUTING_KEY")
-    if pd_key and _safe_post("https://events.pagerduty.com/v2/enqueue",
-                  _pagerduty_body(payload, pd_key)):
+    if pd_key and _safe_post(
+        "https://events.pagerduty.com/v2/enqueue", _pagerduty_body(payload, pd_key)
+    ):
         log.info("escalation.pagerduty_ok", incident_id=payload["incident_id"])
         delivered = True
 

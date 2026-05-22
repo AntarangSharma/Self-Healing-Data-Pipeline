@@ -1,4 +1,5 @@
 """Tests for the per-repo allow-list guardrail."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,7 +24,8 @@ def test_matching_glob_allowed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
 
 
 def test_non_matching_glob_blocked(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     monkeypatch.setenv("SHDPA_ALLOWED_REPOS", "/srv/airflow/*")
     g = Guardrails()
@@ -40,7 +42,8 @@ def test_missing_repo_path_when_env_set(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_multiple_globs_colon_separated(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     (tmp_path / "a").mkdir()
     (tmp_path / "b").mkdir()

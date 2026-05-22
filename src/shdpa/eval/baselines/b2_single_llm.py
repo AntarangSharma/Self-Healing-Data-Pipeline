@@ -1,4 +1,5 @@
 """B2: single LLM call with logs pasted; no tools, no schema diff."""
+
 from __future__ import annotations
 
 import time
@@ -23,7 +24,10 @@ def run(incident: Incident, llm: LLMProvider | None = None) -> Incident:
     system = load_prompt("triage") + "\n\nThen propose fix_kind."
 
     data, resp = llm.complete_json(
-        system=system, user=user, purpose="b2_single_llm", max_tokens=400,
+        system=system,
+        user=user,
+        purpose="b2_single_llm",
+        max_tokens=400,
     )
     meter.record(resp)
     incident.predicted_class = data.get("failure_class", "unknown")
@@ -31,11 +35,17 @@ def run(incident: Incident, llm: LLMProvider | None = None) -> Incident:
     incident.proposed_fix_kind = data.get("fix_kind", "noop")
     incident.proposed_fix_diff = ""  # no tools = no diff
     incident.proposed_files_changed = []
-    incident.llm_calls.append(LLMCall(
-        model=resp.model, provider=resp.provider,
-        prompt_tokens=resp.prompt_tokens, completion_tokens=resp.completion_tokens,
-        cost_usd=resp.cost_usd, latency_ms=resp.latency_ms, purpose="b2_single_llm",
-    ))
+    incident.llm_calls.append(
+        LLMCall(
+            model=resp.model,
+            provider=resp.provider,
+            prompt_tokens=resp.prompt_tokens,
+            completion_tokens=resp.completion_tokens,
+            cost_usd=resp.cost_usd,
+            latency_ms=resp.latency_ms,
+            purpose="b2_single_llm",
+        )
+    )
     incident.actions.append(Action(kind="noop", payload={"policy": "B2"}, dry_run=True))
     incident.resolution_kind = "unresolved"
     incident.resolved = False

@@ -20,6 +20,7 @@ or "cost per incident spiked > $0.05."
 We import FastAPI lazily so `pip install -e .` (without the [serve] extra)
 keeps working in CI.
 """
+
 from __future__ import annotations
 
 import contextlib

@@ -1,4 +1,5 @@
 """Fixture loader. Reads fixture.yaml + side files into an Incident."""
+
 from __future__ import annotations
 
 import json

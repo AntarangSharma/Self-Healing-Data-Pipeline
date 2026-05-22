@@ -6,6 +6,7 @@ Enforces:
 
 Raises CostBudgetExceeded so the agent loop can circuit-break cleanly.
 """
+
 from __future__ import annotations
 
 import os
@@ -46,6 +47,5 @@ class CostMeter:
             )
         if self.total_spend > self.total_cap:
             raise CostBudgetExceeded(
-                f"total cap ${self.total_cap:.2f} exceeded "
-                f"(spent ${self.total_spend:.4f})"
+                f"total cap ${self.total_cap:.2f} exceeded (spent ${self.total_spend:.4f})"
             )

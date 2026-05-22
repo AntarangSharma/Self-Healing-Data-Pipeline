@@ -1,4 +1,5 @@
 """Git diff tool. Returns recent diff for a file in the incident's repo snapshot."""
+
 from __future__ import annotations
 
 import subprocess
